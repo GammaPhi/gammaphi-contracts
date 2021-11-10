@@ -73,6 +73,7 @@ def draw_winner():
 
     user_list.set([])
     ticket_list.set([])
+    total.set(0)
 
     # Send out prize
     phi.transfer(
