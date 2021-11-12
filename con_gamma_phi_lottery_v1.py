@@ -1,12 +1,11 @@
 import currency as tau
-import con_eh_game_token_1 as phi
+import con_phi as phi
 
-phi_balances = ForeignHash(foreign_contract='con_eh_game_token_1', foreign_name='balances')
+phi_balances = ForeignHash(foreign_contract='con_phi', foreign_name='balances')
 
 owner = Variable()
 
 user_list = Variable()
-ticket_list = Variable()
 total = Variable()
 
 balances = Hash(default_value=0)
@@ -16,7 +15,6 @@ random.seed()
 @construct
 def seed():
     user_list.set([])
-    ticket_list.set([])
     total.set(0)
     owner.set(ctx.caller)
 
@@ -25,18 +23,15 @@ def deposit_phi(amount: int):
     # 1 PHI == 1 lottery ticket
     assert phi_balances[ctx.caller] >= amount, 'Insufficient funds!'
 
-    total.set(total.get() + amount)
+    users = set(user_list.get())
 
-    users = user_list.get()
-    tickets = ticket_list.get()
+    users.add(ctx.caller)
 
-    users.append(ctx.caller)
-    tickets.append(total.get())
-
-    user_list.set(users)
-    ticket_list.set(tickets)
+    user_list.set(list(users))
 
     balances[ctx.caller] += amount
+
+    total.set(total.get() + amount)
 
     phi.transfer_from(
         amount=amount,
@@ -55,24 +50,24 @@ def draw_winner():
     lucky_number = random.randint(0, total_tickets-1)
 
     users = user_list.get()
-    tickets = ticket_list.get()
 
     winner = None
 
-    for i in range(len(users)):
-        if lucky_number < tickets[i]:
-            winner = users[i]
+    amount = 0
+
+    for user in users:
+        amount += balances[user]
+        if lucky_number < amount:
+            winner = user
             break
 
     assert winner is not None, 'Unable to draw a valid user'
 
     # Clear previous state
-    distinct_users = set(users)
-    for user in distinct_users:
+    for user in users:
         balances[user] = 0
 
     user_list.set([])
-    ticket_list.set([])
     total.set(0)
 
     # Send out prize
