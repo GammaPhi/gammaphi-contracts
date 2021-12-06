@@ -22,24 +22,22 @@ class MyTestCase(unittest.TestCase):
         import rsa
         (pubkey, privkey) = rsa.newkeys(2048)
 
-
+        # Example message
         message = "hello world"
 
+        # Encrypt message through smart contract
         encrypted = contract.encrypt(
             message_str=message,
             n=pubkey.n,
             e=pubkey.e
         )
-
         print("encrypted: %s" % encrypted)
 
-
-        encrypted_bytes = bytes.fromhex(encrypted)
-
-        decrypted = rsa.decrypt(encrypted_bytes, privkey).decode('utf-8')
+        # Decrypt with rsa library
+        decrypted = rsa.decrypt(bytes.fromhex(encrypted), privkey).decode('utf-8')
         print("decrypted: %s" % decrypted)
 
-
+        # Verify
         self.assertNotEqual(encrypted, message)
         self.assertEqual(decrypted, message)
 
@@ -57,22 +55,20 @@ class MyTestCase(unittest.TestCase):
         
         pubkey = key.publickey()
 
+        # Example message
         message = "hello world"
 
+        # Encrypt message through smart contract
         encrypted = contract.encrypt(
             message_str=message,
             n=pubkey.n,
             e=pubkey.e
         )
-
         print("encrypted: %s" % encrypted)
 
-
-        encrypted_bytes = bytes.fromhex(encrypted)
-
-        decrypted = PKCS1_v1_5.new(key).decrypt(encrypted_bytes, get_random_bytes(16)).decode('utf-8')
+        # Decrypt with PyCryptodome library
+        decrypted = PKCS1_v1_5.new(key).decrypt(bytes.fromhex(encrypted), get_random_bytes(16)).decode('utf-8')
         print("decrypted: %s" % decrypted)
-
 
         self.assertNotEqual(encrypted, message)
         self.assertEqual(decrypted, message)
