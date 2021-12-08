@@ -1,14 +1,15 @@
 #tests/test_contract.py
 import unittest
 import os
+from os.path import dirname, abspath, join
 
 from contracting.client import ContractingClient
 
 client = ContractingClient()
 
-module_dir = os.path.dirname(os.path.dirname(__file__))
+module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'rsa')
 
-with open(os.path.join(module_dir, 'con_rsa_encryption.py'), 'r') as f:
+with open(join(module_dir, 'con_rsa_encryption.py'), 'r') as f:
     code = f.read()
     client.submit(code, name='con_rsa_encryption')
 

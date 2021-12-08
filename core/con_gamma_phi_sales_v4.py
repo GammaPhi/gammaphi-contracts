@@ -1,5 +1,6 @@
+# con_gamma_phi_sales_v4
 import currency as tau
-import con_phi as phi
+import con_phi_lst001 as phi
 
 tau_balances = ForeignHash(foreign_contract='currency', foreign_name='balances')
 
@@ -111,3 +112,9 @@ def pay_out_tau(amount: float):
     tau.transfer(
         amount=amount,
         to=ctx.caller)
+
+@export
+def change_ownership(new_owner: str):
+    assert ctx.caller == owner.get(), 'Only the owner can change ownership!'
+
+    owner.set(new_owner)

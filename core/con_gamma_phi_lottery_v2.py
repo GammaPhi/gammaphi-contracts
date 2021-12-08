@@ -1,7 +1,8 @@
+# con_gamma_phi_lottery_v2
 import currency as tau
-import con_phi as phi
+import con_phi_lst001 as phi
 
-phi_balances = ForeignHash(foreign_contract='con_phi', foreign_name='balances')
+phi_balances = ForeignHash(foreign_contract='con_phi_lst001', foreign_name='balances')
 
 owner = Variable()
 
