@@ -50,6 +50,7 @@ BLIND_POKER = 1
 # Generate rsa pairs
 my_vk, my_sk = generate_keys()
 your_vk, your_sk = generate_keys()
+p3_vk, p3_sk = generate_keys()
 
 
 def setup():
@@ -59,13 +60,21 @@ def setup():
         to='you',
         amount=1_000_000
     )
-
+    phi.transfer(
+        to='p3',
+        amount=1_000_000
+    )
     # Approve PHI
     phi.approve(
         to=POKER_CONTRACT,
         amount=1_000_000
     )
     phi = get_contract_for_signer('you', PHI_CONTRACT)
+    phi.approve(
+        to=POKER_CONTRACT,
+        amount=1_000_000
+    )
+    phi = get_contract_for_signer('p3', PHI_CONTRACT)
     phi.approve(
         to=POKER_CONTRACT,
         amount=1_000_000
@@ -84,6 +93,12 @@ def setup():
         username='you',
         display_name='you',
         public_rsa_key=str(your_vk.n)+"|"+str(your_vk.e)
+    )
+    profile = get_contract_for_signer('p3', PROFILE_CONTRACT)
+    profile.create_profile(
+        username='p3',
+        display_name='p3',
+        public_rsa_key=str(p3_vk.n)+"|"+str(p3_vk.e)
     )
 
 
@@ -112,14 +127,24 @@ class MyTestCase(unittest.TestCase):
             amount=100000
         )
 
+        contract.add_player_to_game(
+            game_id=game_id,
+            player_to_add='p3'
+        )
+
         contract = get_contract_for_signer('you', POKER_CONTRACT)
         contract.add_chips_to_game(
             game_id=game_id,
             amount=100000
         )
-        for game_type in [BLIND_POKER, ONE_CARD_POKER, BLIND_POKER]:
-            random.seed(time.time())
 
+        contract = get_contract_for_signer('p3', POKER_CONTRACT)
+        contract.add_chips_to_game(
+            game_id=game_id,
+            amount=100000
+        )
+
+        for game_type in [ONE_CARD_POKER, BLIND_POKER]:
             contract = get_contract_for_signer('me', POKER_CONTRACT)
 
             # Start a hand
@@ -127,6 +152,7 @@ class MyTestCase(unittest.TestCase):
                 game_id=game_id,
                 game_type=game_type
             )
+            print(f'Hand: {hand_id}')
 
             stored_hand_id = contract.quick_read('games', game_id, ['current_hand'])
             self.assertEqual(hand_id, stored_hand_id)
@@ -285,6 +311,7 @@ class MyTestCase(unittest.TestCase):
                 game_id=game_id,
                 game_type=game_type
             )
+            print(f'Hand: {hand_id}')
 
             contract = get_contract_for_signer('me', POKER_CONTRACT)
             # Ante up
@@ -343,6 +370,86 @@ class MyTestCase(unittest.TestCase):
 
             your_chips_after = contract.quick_read('games', game_id, ['you'])
             self.assertEqual(your_chips + 11, your_chips_after)
+
+            # Start another hand
+            contract = get_contract_for_signer('p3', POKER_CONTRACT)
+
+            hand_id = contract.start_hand(
+                game_id=game_id,
+                game_type=game_type
+            )
+
+            print(f'Hand: {hand_id}')
+
+            active_players = contract.quick_read('hands', hand_id, ['active_players'])
+            self.assertEqual(len(active_players), 0)
+
+            dealer = contract.quick_read('hands', hand_id, ['dealer'])
+            
+            self.assertEqual(dealer, 'p3')
+            # Ante up
+            contract = get_contract_for_signer('p3', POKER_CONTRACT)
+            contract.ante_up(
+                hand_id=hand_id
+            )
+            active_players = contract.quick_read('hands', hand_id, ['active_players'])
+            self.assertIn('p3', active_players)
+
+            contract = get_contract_for_signer('me', POKER_CONTRACT)
+            # Ante up
+            contract.ante_up(
+                hand_id=hand_id
+            )           
+            active_players = contract.quick_read('hands', hand_id, ['active_players'])
+            self.assertIn('me', active_players)
+            self.assertNotIn('you', active_players)
+
+            contract = get_contract_for_signer('you', POKER_CONTRACT)
+            # Ante up
+            contract.ante_up(
+                hand_id=hand_id
+            )
+
+            active_players = contract.quick_read('hands', hand_id, ['active_players'])
+
+            self.assertIn('me', active_players)
+            self.assertIn('you', active_players)
+            self.assertIn('p3', active_players)
+
+            # Deal hand
+            contract = get_contract_for_signer('p3', POKER_CONTRACT)
+            contract.deal_cards(
+                hand_id=hand_id
+            )
+
+            # Bet
+            print('bet6')
+            contract = get_contract_for_signer('me', POKER_CONTRACT)
+            contract.bet_check_or_fold(
+                hand_id=hand_id,
+                bet=10.0
+            )
+
+            # Raise
+            print('bet7')
+            contract = get_contract_for_signer('you', POKER_CONTRACT)
+            contract.bet_check_or_fold(
+                hand_id=hand_id,
+                bet=15
+            )
+
+            # Fold
+            print('bet8')
+            contract = get_contract_for_signer('p3', POKER_CONTRACT)
+            contract.bet_check_or_fold(
+                hand_id=hand_id,
+                bet=-1
+            )
+
+            # Payout hand
+            contract.payout_hand(
+                hand_id=hand_id
+            )
 
 
 if __name__ == '__main__':
