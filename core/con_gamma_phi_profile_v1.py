@@ -1,5 +1,6 @@
 metadata = Hash(default_value=None)
 usernames = Hash(default_value=None)
+total_users = Variable()
 owner = Variable()
 
 
@@ -20,6 +21,7 @@ DEFAULT_METADATA_FIELDS = [
 
 @construct
 def seed():
+    total_users.set(0)
     owner.set(ctx.caller)
 
 
@@ -40,11 +42,12 @@ def create_profile(
 
     user_address = ctx.caller
     
+    validate_username(username)
     assert usernames[username] is None, f'Username {username} already exists.'
     
     usernames[username] = user_address
     metadata[user_address, 'username'] = username
-    metadata[user_address, 'display_name'] = display_name
+    metadata[user_address, 'display_name'] = display_name or username
     metadata[user_address, 'telegram'] = telegram
     metadata[user_address, 'twitter'] = twitter
     metadata[user_address, 'instagram'] = instagram
@@ -54,7 +57,16 @@ def create_profile(
     metadata[user_address, 'icon_base64_png'] = icon_base64_png
     metadata[user_address, 'icon_url'] = icon_url
     update_public_rsa_key(user_address=user_address, key=public_rsa_key)
+    total_users.set(total_users.get()+1)
 
+
+def validate_username(username: str):
+    assert username is not None and len(username) > 0, 'Username cannot be null or empty'
+    assert isinstance(username, str), 'Username must be a string.'
+    assert len(username) <= 16, 'Usernames cannot be longer than 16 characters.'
+    assert all([c.isalnum() or c in ('_', '-') for c in username]), 'Username has invalid characters. Each character must be alphanumeric, a hyphen, or an underscore.'
+    assert username[0] not in ('-', '_') and username[-1] not in ('-', '_'), 'Usernames cannot start or end with a hyphen or underscore.'
+    
 
 def update_public_rsa_key(user_address, key: str):
     if key is None:
@@ -68,8 +80,9 @@ def update_public_rsa_key(user_address, key: str):
 def update_profile_helper(user_address: str, key: str, value: Any):
     assert key != 'extra_fields', 'You cannot update extra_fields with this method.'
     if key == 'username':
+        validate_username(value)
+
         username = metadata[user_address, 'username']
-        
         assert username is not None, 'This user does not exist.'
         assert usernames[value] is None, f'Username {value} already exists.'
         assert value is not None, 'No username provided. Call delete_profile to remove a user profile.'
