@@ -10,7 +10,7 @@ client = ContractingClient()
 module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'core')
 
 
-with open(os.path.join(module_dir, 'con_gamma_phi_profile_v1.py'), 'r') as f:
+with open(os.path.join(module_dir, 'con_gamma_phi_profile_v2.py'), 'r') as f:
     code = f.read()
     client.submit(code, name='con_gamma_phi_profile', signer='me')
 
@@ -45,6 +45,36 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual('hello123', self.contract.quick_read('metadata', 'you', ['display_name']))
         self.assertEqual('you', self.contract.quick_read('usernames', 'hello123'))
         self.assertEqual(1, self.contract.quick_read('total_users'))
+
+    def test_frens(self):
+        client.signer = "someone"
+        contract = client.get_contract('con_gamma_phi_profile')
+        contract.create_profile(
+            username='hello',
+        )
+
+        client.signer = "me"
+        contract = client.get_contract('con_gamma_phi_profile')
+        contract.create_profile(
+            username='me123',
+        )
+
+        self.assertEqual(0, len(contract.quick_read('metadata', 'me', ['frens'])))
+        contract.add_frens(
+            frens=['someone']
+        )
+        self.assertEqual(1, len(contract.quick_read('metadata', 'me', ['frens'])))
+        self.assertEqual('someone', contract.quick_read('metadata', 'me', ['frens'])[0])
+
+        contract.remove_frens(
+            frens=['someone']
+        )
+        self.assertEqual(0, len(contract.quick_read('metadata', 'me', ['frens'])))
+        contract.add_frens(
+            frens=['hello']
+        )
+        self.assertEqual(1, len(contract.quick_read('metadata', 'me', ['frens'])))
+        self.assertEqual('someone', contract.quick_read('metadata', 'me', ['frens'])[0])
 
     def test_create_profile_with_invalid_rsa_key(self):
         pass

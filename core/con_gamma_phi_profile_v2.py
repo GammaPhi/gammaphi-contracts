@@ -1,4 +1,4 @@
-# con_gamma_phi_profile_v1
+# con_gamma_phi_profile_v2
 metadata = Hash(default_value=None)
 usernames = Hash(default_value=None)
 total_users = Variable()
@@ -16,7 +16,8 @@ DEFAULT_METADATA_FIELDS = [
     'icon_base64_svg',
     'icon_base64_png',
     'icon_url',
-    'public_rsa_key'
+    'public_rsa_key',
+    'frens'
 ]
 
 
@@ -57,8 +58,44 @@ def create_profile(
     metadata[user_address, 'icon_base64_svg'] = icon_base64_svg
     metadata[user_address, 'icon_base64_png'] = icon_base64_png
     metadata[user_address, 'icon_url'] = icon_url
+    metadata[user_address, 'frens'] = []
     update_public_rsa_key(user_address=user_address, key=public_rsa_key)
     total_users.set(total_users.get()+1)
+
+
+@export
+def add_frens(frens: list):
+    user_address = ctx.caller
+    assert metadata[user_address, 'username'] is not None, 'You do not have a profile. Please create one first.'
+    current_frens = metadata[user_address, 'frens'] or []
+    for fren in frens:
+        # Check for address or username
+        fren_address = usernames[fren]
+        if fren_address is None:
+            fren_address = fren
+        
+        assert metadata[fren_address, 'username'] is not None, f'{fren_address} does not have a profile.'
+        assert fren_address != user_address, 'You cannot add yourself as a fren'
+
+        if fren_address not in current_frens:
+            current_frens.append(fren_address)
+    metadata[user_address, 'frens'] = current_frens
+
+
+@export 
+def remove_frens(frens: list):
+    user_address = ctx.caller
+    assert metadata[user_address, 'username'] is not None, 'You do not have a profile. Please create one first.'
+    current_frens = metadata[user_address, 'frens'] or []
+    for fren in frens:
+        # Check for address or username
+        fren_address = usernames[fren]
+        if fren_address is None:
+            fren_address = fren
+        
+        if fren_address in current_frens:
+            current_frens.remove(fren_address)
+    metadata[user_address, 'frens'] = current_frens
 
 
 def validate_username(username: str):
@@ -80,6 +117,8 @@ def update_public_rsa_key(user_address, key: str):
 
 def update_profile_helper(user_address: str, key: str, value: Any):
     assert key != 'extra_fields', 'You cannot update extra_fields with this method.'
+    assert metadata[user_address, 'username'] is not None, 'You do not have a profile. Please create one first.'
+    
     if key == 'username':
         validate_username(value)
 
@@ -116,10 +155,13 @@ def delete_profile_helper(user_address: str):
     metadata[user_address, 'icon_base64_svg'] = None
     metadata[user_address, 'icon_base64_png'] = None
     metadata[user_address, 'icon_url'] = None
+    metadata[user_address, 'frens'] = None
     update_public_rsa_key(user_address=user_address, key=None)
     extra_fields = metadata[user_address, 'extra_fields'] or []
     for field in extra_fields:
         metadata[user_address, field] = None
+    # Subtract from total user count
+    total_users.set(total_users.get()-1)
 
 @export
 def delete_profile():
