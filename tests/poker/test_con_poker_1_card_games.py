@@ -21,9 +21,9 @@ with open(os.path.join(external_deps_dir, 'core', 'con_phi_lst001.py'), 'r') as 
     code = f.read()
     client.submit(code, name='con_phi_lst001', signer='me')
 
-with open(os.path.join(external_deps_dir, 'core', 'con_gamma_phi_profile_v1.py'), 'r') as f:
+with open(os.path.join(external_deps_dir, 'core', 'con_gamma_phi_profile_v2.py'), 'r') as f:
     code = f.read()
-    client.submit(code, name='con_gamma_phi_profile_v1')
+    client.submit(code, name='con_gamma_phi_profile_v2')
 
 with open(os.path.join(module_dir, 'con_poker_1_card_games_v1.py'), 'r') as f:
     code = f.read()
@@ -43,7 +43,7 @@ def get_contract_for_signer(signer, contract):
 POKER_CONTRACT = 'con_poker_1_card_games'
 PHI_CONTRACT = 'con_phi_lst001'
 RSA_CONTRACT = 'con_rsa_encryption'
-PROFILE_CONTRACT = 'con_gamma_phi_profile_v1'
+PROFILE_CONTRACT = 'con_gamma_phi_profile_v2'
 ONE_CARD_POKER = 0
 BLIND_POKER = 1
 

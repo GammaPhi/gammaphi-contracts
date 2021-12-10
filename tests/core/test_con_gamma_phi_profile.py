@@ -26,7 +26,7 @@ class MyTestCase(unittest.TestCase):
         self.contract = client.get_contract('con_gamma_phi_profile')
 
     def test_create_simple_profile(self):
-        self.assertEqual(0, self.contract.quick_read('total_users'))
+        n = self.contract.quick_read('total_users')
         self.contract.create_profile(
             username='hello123',
             #display_name=None,
@@ -44,7 +44,29 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual('hello123', self.contract.quick_read('metadata', 'you', ['username']))
         self.assertEqual('hello123', self.contract.quick_read('metadata', 'you', ['display_name']))
         self.assertEqual('you', self.contract.quick_read('usernames', 'hello123'))
-        self.assertEqual(1, self.contract.quick_read('total_users'))
+        self.assertEqual(n+1, self.contract.quick_read('total_users'))
+
+    def test_change_username(self):
+        client.signer = "a1"
+        contract = client.get_contract('con_gamma_phi_profile')
+
+        contract.create_profile(
+            username='u1',
+        )
+
+        self.assertEqual('u1', contract.quick_read('metadata', 'a1', ['username']))
+        self.assertEqual('u1', contract.quick_read('metadata', 'a1', ['display_name']))
+        self.assertEqual('a1', contract.quick_read('usernames', 'u1'))
+
+        contract.update_profile(
+            key='username',
+            value='u2',
+        )
+
+        self.assertEqual('u2', contract.quick_read('metadata', 'a1', ['username']))
+        self.assertEqual('u1', contract.quick_read('metadata', 'a1', ['display_name']))
+        self.assertEqual('a1', contract.quick_read('usernames', 'u2'))
+
 
     def test_frens(self):
         client.signer = "someone"

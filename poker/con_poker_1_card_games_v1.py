@@ -3,7 +3,7 @@ import con_rsa_encryption as rsa
 import con_phi_lst001 as phi
 
 phi_balances = ForeignHash(foreign_contract='con_phi_lst001', foreign_name='balances')
-player_metadata = ForeignHash(foreign_contract='con_gamma_phi_profile_v1', foreign_name='metadata')
+player_metadata = ForeignHash(foreign_contract='con_gamma_phi_profile_v2', foreign_name='metadata')
 
 games = Hash(default_value=None)
 hands = Hash(default_value=None)
@@ -149,14 +149,20 @@ def leave_game(game_id: str):
         active_players = hands[hand_id, 'active_players'] or []
         if player in active_players:
             folded = hands[hand_id, 'folded']
-            # Check for next better before removing player from hand state
-            next_better = get_next_better(active_players, folded, player)
-            hands[hand_id, 'next_better'] = next_better
+            all_in = hands[hand_id, 'all_in']
+            next_better = hands[hand_id, 'next_better']
+            if next_better == player:
+                # Check for next better before removing player from hand state
+                next_better = get_next_better(active_players, folded, all_in, player)
+                hands[hand_id, 'next_better'] = next_better
             active_players.remove(player)
             hands[hand_id, 'active_players'] = active_players
             if player in folded:
                 folded.remove(player)
                 hands[hand_id, 'folded'] = folded
+            if player in all_in:
+                all_in.remove(player)
+                hands[hand_id, 'all_in'] = all_in
 
 
 @export
@@ -196,6 +202,7 @@ def start_hand(game_id: str, game_type: int) -> str:
     hands[hand_id, 'reached_dealer'] = False
     hands[hand_id, 'active_players'] = []
     hands[hand_id, 'current_bet'] = 0
+    hands[hand_id, 'all_in'] = []
     return hand_id
 
 
@@ -213,17 +220,24 @@ def ante_up(hand_id: str):
     players = get_players_and_assert_exists(game_id)    
     assert player in players, 'You are not a part of this game.'
     ante = games[game_id, 'ante']
-    assert (games[game_id, player] or -1) >= ante, 'You do not have enough chips.'
+    chips = games[game_id, player]
+    assert chips is not None and chips >= ante, 'You do not have enough chips.'
     active_players = hands[hand_id, 'active_players'] or []
     assert player not in active_players, 'You have already paid the ante.'
     # Pay ante
     hands[hand_id, player, 'bet'] = ante
+    hands[hand_id, player, 'max_bet'] = chips
     games[game_id, player] -= ante
     # Update hand state
     active_players.append(player)
     active_players.sort(key=active_player_sort(players))
     hands[hand_id, 'active_players'] = active_players
     hands[hand_id, 'current_bet'] = ante
+    if chips == ante:
+        # All in
+        all_in = hands[hand_id, 'all_in']
+        all_in.append(player)
+        hands[hand_id, 'all_in'] = all_in
 
 
 @export
@@ -272,16 +286,18 @@ def deal_cards(hand_id: str):
         hands[hand_id, player, 'house_encrypted_hand'] = house_encrypted_hand
 
     # Update hand state
-    hands[hand_id, 'next_better'] = get_next_better(active_players, [], dealer)
+    all_in = hands[hand_id, 'all_in']
+    hands[hand_id, 'next_better'] = get_next_better(active_players, [], all_in, dealer)
     ante = games[hands[hand_id, 'game_id'], 'ante']
     hands[hand_id, 'pot'] = ante * len(active_players)
 
 
-def get_next_better(players: list, folded: list, current_better: str) -> str:
+def get_next_better(players: list, folded: list, all_in: list, current_better: str) -> str:
     if len(folded) >= len(players) - 1:
-        return None # No one needs to bet
-    
-    non_folded_players = [p for p in players if p not in folded]
+        return None # No one needs to bet, only one player left in the hand
+    if len(players) == len(all_in):
+        return None # No one needs to bet, everyone is all in
+    non_folded_players = [p for p in players if p not in folded and p not in all_in]
     current_index = non_folded_players.index(current_better)    
     assert current_index >= 0, 'Current better has folded, which does not make sense.'
     return non_folded_players[(current_index + 1) % len(non_folded_players)]
@@ -309,7 +325,8 @@ def bet_check_or_fold(hand_id: str, bet: float):
     else:
         reached_dealer = hands[hand_id, 'reached_dealer']
 
-    next_better = get_next_better(active_players, folded, player)
+    all_in = hands[hand_id, 'all_in']
+    next_better = get_next_better(active_players, folded, all_in, player)
 
     if next_better is None:
         # No need to bet, this is the end of the hand
@@ -320,11 +337,18 @@ def bet_check_or_fold(hand_id: str, bet: float):
             # Folding
             folded.append(player)
             hands[hand_id, 'folded'] = folded
+            if player in all_in:
+                all_in.remove(player)
+                hands[hand_id, 'all_in'] = all_in
             if len(folded) == len(active_players) - 1:
                 hands[hand_id, 'completed'] = True
         elif bet == 0:
             # Checking
-            assert player_previous_bet >= call_bet, 'Cannot check in this scenario. Current bet is above your bet.'
+            max_bet = hands[hand_id, player, 'max_bet']
+            if max_bet == player_previous_bet and player not in all_in:
+                all_in.append(player)
+                hands[hand_id, 'all_in'] = all_in
+            assert max_bet == player_previous_bet or player_previous_bet >= call_bet, 'Cannot check in this scenario. Current bet is above your bet and you are not all in.'
             next_players_bet = hands[hand_id, next_better, 'bet']
             if next_players_bet is not None and next_players_bet == call_bet and reached_dealer:
                 # Betting is over (TODO allow reraise)
@@ -334,15 +358,15 @@ def bet_check_or_fold(hand_id: str, bet: float):
             game_id = hands[hand_id, 'game_id']
             assert games[game_id, player] >= bet, 'You do not have enough chips to make this bet'
             current_bet = player_previous_bet + bet
-            assert current_bet >= call_bet, 'Current bet is above your bet.'            
+            max_bet = hands[hand_id, player, 'max_bet']
+            if max_bet == current_bet and player not in all_in:
+                all_in.append(player)
+                hands[hand_id, 'all_in'] = all_in
+            assert max_bet == current_bet or current_bet >= call_bet, 'Current bet is above your bet and you did not go all in.'            
             hands[hand_id, player, 'bet'] = current_bet
             hands[hand_id, 'current_bet'] = current_bet
             hands[hand_id, 'pot'] += bet
             games[game_id, player] -= bet
-            #next_players_bet = hands[hand_id, next_better, 'bet']
-            #if next_players_bet is not None and next_players_bet == current_bet:
-            #    # Betting is over (TODO allow reraise)
-            #    hands[hand_id, 'completed'] = True
         
     hands[hand_id, 'next_better'] = next_better
 
@@ -405,6 +429,30 @@ def verify_hand(hand_id: str, player_hand_str: str) -> str:
         return 'Verification succeeded.'
     
 
+def find_winners(ranks: dict, players: list) -> list:
+    sorted_rank_values = sorted(ranks.keys())
+    player_set = set(players)
+    for rank in sorted_rank_values:
+        players_with_rank = ranks[rank]
+        intersection = player_set.intersection(set(players_with_rank))
+        if len(intersection) > 0:
+            # Found players
+            winners = list(intersection)
+            break
+    return winners
+
+
+def calculate_ranks(hand_id: str, players: list) -> dict:
+    ranks = {}
+    for p in players:
+        rank = hands[hand_id, p, 'rank']
+        assert rank is not None, f'Player {p} has not verified their hand yet.'
+        if rank not in ranks:
+            ranks[rank] = []
+        ranks[rank].append(p)
+    return ranks
+
+
 @export
 def payout_hand(hand_id: str):
     pot = hands[hand_id, 'pot']
@@ -412,39 +460,65 @@ def payout_hand(hand_id: str):
     assert not hands[hand_id, 'payed_out'], 'This hand has already been payed out.'
     
     folded = hands[hand_id, 'folded']
-    players = hands[hand_id, 'active_players']
+    all_in = hands[hand_id, 'all_in']
+    active_players = hands[hand_id, 'active_players']
 
-    remaining = [p for p in players if p not in folded]
+    remaining = [p for p in active_players if p not in folded]
     assert len(remaining) > 0, 'There are no remaining players.'
+
+    payouts = {}
 
     if len(remaining) == 1:
         # Just pay out, everyone else folded
-        winners = remaining
-
+        payouts[remaining[0]] = pot
     else:
-        ranks = {}
-        best_rank = None
-        for p in remaining:
-            rank = hands[hand_id, p, 'rank']
-            assert rank is not None, f'Player {p} has not verified their hand yet.'
-            if rank not in ranks:
-                ranks[rank] = []
-            ranks[rank] = [p]
-            if best_rank is None:
-                best_rank = rank
-            else:
-                best_rank = min(best_rank, rank)
-
-        # Handle pot splitting
-        winners = ranks[best_rank]
-    payout = pot / len(winners)
+        ranks = calculate_ranks(hand_id, remaining)
+        if len(all_in) > 0:
+            # Need to calculate split pots
+            all_in_map = {}
+            for player in all_in:
+                # Check all in amount
+                amount = hands[hand_id, player, 'max_bet']
+                all_in_map[player] = amount
+            pots = sorted(set(all_in_map.values()))
+            total_payed_out = 0
+            for bet in pots:
+                players_in_pot = []
+                for player in remaining:
+                    if player not in all_in_map or all_in_map[player] >= bet:
+                        players_in_pot.append(player)
+                        pot_winners = find_winners(ranks, players_in_pot)
+                        pot_payout = bet * len(players_in_pot)
+                        total_payed_out += pot_payout
+                        payout = pot_payout / len(pot_winners)
+                        for winner in pot_winners:
+                            if winner not in payouts:
+                                payouts[winner] = 0
+                            payouts[winner] += payout                            
+            remaining_to_payout = pot - total_payed_out
+            not_all_in = set(remaining).difference(set(all_in))
+            assert remaining_to_payout == 0 or len(not_all_in) > 0, 'Invalid state when calculating side pots.'
+            if remaining_to_payout > 0:
+                if len(not_all_in) == 1:
+                    winners = not_all_in
+                else:
+                    winners = find_winners(ranks, not_all_in)
+                payout = remaining_to_payout / len(winners)
+                for winner in winners:
+                    if winner not in payouts:
+                        payouts[winner] = 0
+                    payouts[winner] += payout
+        else:
+            winners = find_winners(ranks, remaining)
+            payout = pot / len(winners)
+            for winner in winners:
+                payouts[winner] = payout
 
     game_id = hands[hand_id, 'game_id']
-
-    for player in winners:
+    for player, payout in payouts.items():
         games[game_id, player] += payout
 
-    hands[hand_id, 'winners'] = winners
+    hands[hand_id, 'winners'] = list(payouts.keys())
     hands[hand_id, 'payed_out'] = True
 
 
