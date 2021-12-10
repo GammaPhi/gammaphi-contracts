@@ -119,8 +119,20 @@ class MyTestCase(unittest.TestCase):
 
         # Verify game state
         self.assertEqual(contract.quick_read('games', game_id, ['creator']), 'me')
+        self.assertEqual(tuple(contract.quick_read('games', game_id, ['players'])), ('me',))
+
+        self.assertEqual((game_id,), tuple(contract.quick_read('players_invites', 'you')))
+
+        contract = get_contract_for_signer('you', POKER_CONTRACT)
+        contract.respond_to_invite(
+            game_id=game_id,
+            accept=True
+        )
+
+        self.assertEqual(0, len(contract.quick_read('players_invites', 'you')))
         self.assertEqual(tuple(contract.quick_read('games', game_id, ['players'])), ('me', 'you'))
 
+        contract = get_contract_for_signer('me', POKER_CONTRACT)
         # Add chips for each player
         contract.add_chips_to_game(
             game_id=game_id,
@@ -131,6 +143,24 @@ class MyTestCase(unittest.TestCase):
             game_id=game_id,
             player_to_add='p3'
         )
+        self.assertEqual((game_id,), tuple(contract.quick_read('players_invites', 'p3')))
+        contract = get_contract_for_signer('p3', POKER_CONTRACT)
+        contract.respond_to_invite(
+            game_id=game_id,
+            accept=False
+        )
+        self.assertEqual(0, len(contract.quick_read('players_invites', 'p3')))
+        self.assertEqual((game_id,), tuple(contract.quick_read('players_invites', 'p3', ['declined'])))
+        self.assertEqual(tuple(contract.quick_read('games', game_id, ['players'])), ('me', 'you'))
+
+        contract.respond_to_invite(
+            game_id=game_id,
+            accept=True
+        )
+
+        self.assertEqual(0, len(contract.quick_read('players_invites', 'p3')))
+        self.assertEqual(0, len(contract.quick_read('players_invites', 'p3', ['declined'])))
+        self.assertEqual(tuple(contract.quick_read('games', game_id, ['players'])), ('me', 'you', 'p3'))
 
         contract = get_contract_for_signer('you', POKER_CONTRACT)
         contract.add_chips_to_game(

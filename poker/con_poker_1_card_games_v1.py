@@ -8,6 +8,7 @@ player_metadata = ForeignHash(foreign_contract='con_gamma_phi_profile_v2', forei
 games = Hash(default_value=None)
 hands = Hash(default_value=None)
 players_games = Hash(default_value=[])
+players_invites = Hash(default_value=[])
 owner = Variable()
 
 MAX_PLAYERS = 50
@@ -103,6 +104,48 @@ def withdraw_chips_from_game(game_id: str, amount: float):
 
 
 @export
+def respond_to_invite(game_id: str, accept: bool):
+    player = ctx.caller
+    player_invites = players_invites[player] or []
+    players = get_players_and_assert_exists(game_id)
+    assert player not in players, 'You are already a part of this game.'
+    declined = players_invites[player, 'declined'] or []
+    assert game_id in player_invites or game_id in declined, 'You have not been invited to this game.'
+    if game_id in player_invites:
+        player_invites.remove(game_id)
+        players_invites[player] = player_invites
+    players_invites[player, game_id] = accept
+    if accept:
+        if game_id in declined:
+            declined.remove(game_id)
+            players_invites[player, 'declined'] = declined
+        players.append(player)
+        games[game_id, 'players'] = players
+        players_games[player] = players_games[player] + [game_id]
+    else:
+        if game_id not in declined:
+            declined.append(game_id)
+            players_invites[player, 'declined'] = declined
+
+
+@export
+def decline_all_invites():
+    # Nuclear option
+    player = ctx.caller
+    invites = players_invites[player] or []
+    for invite in invites:
+        players_invites[player, invite] = False
+    players_invites[player] = []
+    
+
+def send_invite_requests(game_id: str, others: list):
+    for other in others:
+        player_invites = players_invites[other] or []
+        player_invites.append(game_id)
+        players_invites[other] = player_invites
+
+
+@export
 def start_game(other_players: list, ante: float) -> str:
     creator = ctx.caller
     
@@ -115,16 +158,31 @@ def start_game(other_players: list, ante: float) -> str:
 
     assert games[game_id, 'creator'] is None, f'Game {game_id} has already been created.'
 
-    games[game_id, 'players'] = [creator, *other_players]
+    games[game_id, 'players'] = [creator]
     games[game_id, 'ante'] = ante
     games[game_id, 'creator'] = creator
-    
-    players_games[creator] = players_games[creator] + [game_id]
+    games[game_id, 'invitees'] = other_players
 
-    for player in other_players:
-        players_games[player] = players_games[player] + [game_id]
+    players_games[creator] = (players_games[creator] or []) + [game_id]
+
+    send_invite_requests(game_id, other_players)
 
     return game_id
+
+
+@export
+def add_player_to_game(game_id: str, player_to_add: str):
+    player = ctx.caller
+    assert player != player_to_add, 'You cannot add yourself to a game.'
+    creator = games[game_id, 'creator']
+    assert player == creator, 'Only the game creator can add players.'
+    players = get_players_and_assert_exists(game_id)
+    assert player_to_add not in players, 'Player is already in the game.'
+    invitees = games[game_id, 'invitees']
+    assert player_to_add not in invitees, 'Player has already been invited.'
+    invitees.append(player_to_add)
+    games[game_id, 'invitees'] = invitees
+    send_invite_requests(game_id, [player_to_add])
 
 
 @export
@@ -166,24 +224,13 @@ def leave_game(game_id: str):
 
 
 @export
-def add_player_to_game(game_id: str, player_to_add: str):
-    player = ctx.caller
-    assert player != player_to_add, 'You cannot add yourself to a game.'
-    creator = games[game_id, 'creator']
-    assert player == creator, 'Only the game creator can add players.'
-    players = get_players_and_assert_exists(game_id)
-    assert player_to_add not in players, 'Player is already in the game.'
-    players.append(player_to_add)
-    games[game_id, 'players'] = players
-
-
-@export
 def start_hand(game_id: str, game_type: int) -> str:
     dealer = ctx.caller
     assert game_type == ONE_CARD_POKER or game_type == BLIND_POKER, 'Invalid game type.'
 
     players = get_players_and_assert_exists(game_id)    
     assert dealer in players, 'You are not a part of this game.'
+    assert len(players) > 1, 'You cannot start a hand by yourself.'
 
     previous_hand_id = games[game_id, 'current_hand']
     if previous_hand_id is not None:
