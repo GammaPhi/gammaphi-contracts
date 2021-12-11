@@ -15,6 +15,7 @@ DEFAULT_METADATA_FIELDS = [
     'discord',
     'icon_base64_svg',
     'icon_base64_png',
+    'icon_base64_jpg',
     'icon_url',
     'public_rsa_key',
     'frens'
@@ -38,6 +39,7 @@ def create_profile(
         discord: str = None,
         icon_base64_svg: str = None,
         icon_base64_png: str = None,
+        icon_base64_jpg: str = None,
         icon_url: str = None,
         public_rsa_key: str = None # Expected to be "{n}|{e}"
     ):
@@ -57,6 +59,7 @@ def create_profile(
     metadata[user_address, 'discord'] = discord
     metadata[user_address, 'icon_base64_svg'] = icon_base64_svg
     metadata[user_address, 'icon_base64_png'] = icon_base64_png
+    metadata[user_address, 'icon_base64_jpg'] = icon_base64_jpg
     metadata[user_address, 'icon_url'] = icon_url
     metadata[user_address, 'frens'] = []
     update_public_rsa_key(user_address=user_address, key=public_rsa_key)
@@ -154,6 +157,7 @@ def delete_profile_helper(user_address: str):
     metadata[user_address, 'discord'] = None
     metadata[user_address, 'icon_base64_svg'] = None
     metadata[user_address, 'icon_base64_png'] = None
+    metadata[user_address, 'icon_base64_jpg'] = None
     metadata[user_address, 'icon_url'] = None
     metadata[user_address, 'frens'] = None
     update_public_rsa_key(user_address=user_address, key=None)
