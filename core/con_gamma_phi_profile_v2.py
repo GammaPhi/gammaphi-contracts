@@ -13,9 +13,7 @@ DEFAULT_METADATA_FIELDS = [
     'instagram',
     'facebook',
     'discord',
-    'icon_base64_svg',
-    'icon_base64_png',
-    'icon_base64_jpg',
+    'icon_base64',
     'icon_url',
     'public_rsa_key',
     'frens'
@@ -37,9 +35,7 @@ def create_profile(
         instagram: str = None,
         facebook: str = None,
         discord: str = None,
-        icon_base64_svg: str = None,
-        icon_base64_png: str = None,
-        icon_base64_jpg: str = None,
+        icon_base64: str = None,
         icon_url: str = None,
         public_rsa_key: str = None # Expected to be "{n}|{e}"
     ):
@@ -57,9 +53,7 @@ def create_profile(
     metadata[user_address, 'instagram'] = instagram
     metadata[user_address, 'facebook'] = facebook
     metadata[user_address, 'discord'] = discord
-    metadata[user_address, 'icon_base64_svg'] = icon_base64_svg
-    metadata[user_address, 'icon_base64_png'] = icon_base64_png
-    metadata[user_address, 'icon_base64_jpg'] = icon_base64_jpg
+    metadata[user_address, 'icon_base64'] = icon_base64
     metadata[user_address, 'icon_url'] = icon_url
     metadata[user_address, 'frens'] = []
     update_public_rsa_key(user_address=user_address, key=public_rsa_key)
@@ -155,9 +149,7 @@ def delete_profile_helper(user_address: str):
     metadata[user_address, 'instagram'] = None
     metadata[user_address, 'facebook'] = None
     metadata[user_address, 'discord'] = None
-    metadata[user_address, 'icon_base64_svg'] = None
-    metadata[user_address, 'icon_base64_png'] = None
-    metadata[user_address, 'icon_base64_jpg'] = None
+    metadata[user_address, 'icon_base64'] = None
     metadata[user_address, 'icon_url'] = None
     metadata[user_address, 'frens'] = None
     update_public_rsa_key(user_address=user_address, key=None)

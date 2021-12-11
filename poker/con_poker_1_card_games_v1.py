@@ -9,6 +9,7 @@ games = Hash(default_value=None)
 hands = Hash(default_value=None)
 players_games = Hash(default_value=[])
 players_invites = Hash(default_value=[])
+messages_hash = Hash(default_value=[])
 owner = Variable()
 
 MAX_PLAYERS = 50
@@ -72,6 +73,26 @@ def create_hand_id(game_id: str) -> str:
 
 
 @export
+def game_message(game_id: str, message: str):
+    player = ctx.caller
+    players = get_players_and_assert_exists(game_id)
+    assert player in players, 'You do not belong to this game.'
+    messages = messages_hash[game_id, player] or []
+    messages.append(message)
+    messages_hash[game_id, player] = messages
+
+
+@export
+def hand_message(hand_id: str, message: str):
+    player = ctx.caller
+    active_players = hands[hand_id, 'active_players']
+    assert player in active_players, 'You do not belong to this hand.'
+    messages = messages_hash[hand_id, player] or []
+    messages.append(message)
+    messages_hash[hand_id, player] = messages
+
+
+@export
 def add_chips_to_game(game_id: str, amount: float):
     player = ctx.caller
     assert amount > 0, 'Amount must be a positive number'
@@ -109,8 +130,9 @@ def respond_to_invite(game_id: str, accept: bool):
     player_invites = players_invites[player] or []
     players = get_players_and_assert_exists(game_id)
     assert player not in players, 'You are already a part of this game.'
+    assert len(players) < MAX_PLAYERS, f'Only {MAX_PLAYERS} are allowed to play at the same time.'
     declined = players_invites[player, 'declined'] or []
-    assert game_id in player_invites or game_id in declined, 'You have not been invited to this game.'
+    assert game_id in player_invites or game_id in declined or games[game_id, 'public'], 'You have not been invited to this game.'
     if game_id in player_invites:
         player_invites.remove(game_id)
         players_invites[player] = player_invites
@@ -121,7 +143,7 @@ def respond_to_invite(game_id: str, accept: bool):
             players_invites[player, 'declined'] = declined
         players.append(player)
         games[game_id, 'players'] = players
-        players_games[player] = players_games[player] + [game_id]
+        players_games[player] = (players_games[player] or []) + [game_id]
     else:
         if game_id not in declined:
             declined.append(game_id)
@@ -146,7 +168,7 @@ def send_invite_requests(game_id: str, others: list):
 
 
 @export
-def start_game(other_players: list, ante: float) -> str:
+def start_game(other_players: list, ante: float, public: bool = False) -> str:
     creator = ctx.caller
     
     assert ante >= 0, 'Ante must be non-negative.'
@@ -162,6 +184,7 @@ def start_game(other_players: list, ante: float) -> str:
     games[game_id, 'ante'] = ante
     games[game_id, 'creator'] = creator
     games[game_id, 'invitees'] = other_players
+    games[game_id, 'public'] = public
 
     players_games[creator] = (players_games[creator] or []) + [game_id]
 
@@ -181,6 +204,7 @@ def add_player_to_game(game_id: str, player_to_add: str):
     invitees = games[game_id, 'invitees']
     assert player_to_add not in invitees, 'Player has already been invited.'
     invitees.append(player_to_add)
+    assert len(players) < MAX_PLAYERS, f'Only {MAX_PLAYERS} are allowed to play at the same time.'
     games[game_id, 'invitees'] = invitees
     send_invite_requests(game_id, [player_to_add])
 
