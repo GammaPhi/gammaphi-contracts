@@ -12,6 +12,15 @@ client = ContractingClient()
 module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'poker')
 external_deps_dir = os.path.dirname(module_dir)
 
+POKER_CONTRACT = 'con_poker_card_games'
+PHI_CONTRACT = 'con_phi_lst001'
+RSA_CONTRACT = 'con_rsa_encryption'
+PROFILE_CONTRACT = 'con_gamma_phi_profile_v4'
+EVALUATOR_CONTRACT = 'con_poker_hand_evaluator_v1'
+ONE_CARD_POKER = 0
+BLIND_POKER = 1
+FIVE_CARD_STUD = 2
+
 
 with open(os.path.join(external_deps_dir, 'rsa', 'con_rsa_encryption.py'), 'r') as f:
     code = f.read()
@@ -21,31 +30,28 @@ with open(os.path.join(external_deps_dir, 'core', 'con_phi_lst001.py'), 'r') as 
     code = f.read()
     client.submit(code, name='con_phi_lst001', signer='me')
 
-with open(os.path.join(external_deps_dir, 'core', 'con_gamma_phi_profile_v2.py'), 'r') as f:
+with open(os.path.join(external_deps_dir, 'core', f'{PROFILE_CONTRACT}.py'), 'r') as f:
     code = f.read()
-    client.submit(code, name='con_gamma_phi_profile_v2')
+    client.submit(code, name=PROFILE_CONTRACT)
 
-with open(os.path.join(module_dir, 'con_poker_1_card_games_v1.py'), 'r') as f:
+with open(os.path.join(external_deps_dir, 'cards', f'{EVALUATOR_CONTRACT}.py'), 'r') as f:
     code = f.read()
-    client.submit(code, name='con_poker_1_card_games')
+    client.submit(code, name=EVALUATOR_CONTRACT)
+
+with open(os.path.join(module_dir, 'con_poker_card_games_v1.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=POKER_CONTRACT)
 
 
 # Generate keys with rsa library
 def generate_keys():
-    return rsa.newkeys(1024)
+    return rsa.newkeys(512)
 
 
 def get_contract_for_signer(signer, contract):
     client.signer = signer        
     return client.get_contract(contract)
 
-
-POKER_CONTRACT = 'con_poker_1_card_games'
-PHI_CONTRACT = 'con_phi_lst001'
-RSA_CONTRACT = 'con_rsa_encryption'
-PROFILE_CONTRACT = 'con_gamma_phi_profile_v2'
-ONE_CARD_POKER = 0
-BLIND_POKER = 1
 
 # Generate rsa pairs
 my_vk, my_sk = generate_keys()
@@ -113,7 +119,10 @@ class MyTestCase(unittest.TestCase):
 
         # Start a game
         game_id = contract.start_game(
+            name='MyGame',
             other_players=['you'],
+            allowed_game_types=[0, 1, 2],
+            allowed_betting_types=[0, 1],
             ante=1.0,
         )
 
@@ -174,13 +183,14 @@ class MyTestCase(unittest.TestCase):
             amount=100000
         )
 
-        for game_type in [ONE_CARD_POKER, BLIND_POKER]:
+        for game_type in [ONE_CARD_POKER, BLIND_POKER, FIVE_CARD_STUD]:
             contract = get_contract_for_signer('me', POKER_CONTRACT)
 
             # Start a hand
             hand_id = contract.start_hand(
                 game_id=game_id,
-                game_type=game_type
+                game_type=game_type,
+                bet_type=0,
             )
             print(f'Hand: {hand_id}')
 
@@ -225,8 +235,10 @@ class MyTestCase(unittest.TestCase):
             # Verify hands
             if game_type == ONE_CARD_POKER:
                 expected_num_cards = 1
-            else:
+            elif game_type == BLIND_POKER:
                 expected_num_cards = 1
+            else:
+                expected_num_cards = 5
 
             my_cards = my_hand.split(':')[0].split(',')
             self.assertEqual(len(my_cards), expected_num_cards)
@@ -310,11 +322,11 @@ class MyTestCase(unittest.TestCase):
             your_chips = contract.quick_read('games', game_id, ['you'])
 
             if my_rank > your_rank:
-                self.assertNotIn('me', winners)
-                self.assertIn('you', winners)
-            elif my_rank < your_rank:
                 self.assertIn('me', winners)
                 self.assertNotIn('you', winners)
+            elif my_rank < your_rank:
+                self.assertNotIn('me', winners)
+                self.assertIn('you', winners)
             else:
                 self.assertIn('me', winners)
                 self.assertIn('you', winners)
@@ -339,7 +351,8 @@ class MyTestCase(unittest.TestCase):
             contract = get_contract_for_signer('you', POKER_CONTRACT)
             hand_id = contract.start_hand(
                 game_id=game_id,
-                game_type=game_type
+                game_type=game_type,
+                bet_type=0,
             )
             print(f'Hand: {hand_id}')
 
@@ -406,7 +419,8 @@ class MyTestCase(unittest.TestCase):
 
             hand_id = contract.start_hand(
                 game_id=game_id,
-                game_type=game_type
+                game_type=game_type,
+                bet_type=0,
             )
 
             print(f'Hand: {hand_id}')

@@ -1,4 +1,4 @@
-# con_gamma_phi_profile_v2
+# con_gamma_phi_profile_v4
 metadata = Hash(default_value=None)
 usernames = Hash(default_value=None)
 total_users = Variable()
@@ -107,9 +107,8 @@ def update_public_rsa_key(user_address, key: str):
     if key is None:
         metadata[user_address, 'public_rsa_key'] = None
     else:
-        parts = key.split('|')
-        assert len(key) != 2, 'Invalid key format'
-        metadata[user_address, 'public_rsa_key'] = [int(parts[0]), int(parts[1])]
+        assert len(key.split('|')) == 2, 'Invalid key format'
+        metadata[user_address, 'public_rsa_key'] = key
 
 
 def update_profile_helper(user_address: str, key: str, value: Any):
@@ -179,6 +178,19 @@ def update_profile(key: str, value: Any):
 def force_update_profile(user_address: str, key: str, value: Any):
     assert ctx.caller == owner.get(), 'Only the owner can call force_update_profile'
     update_profile_helper(user_address=user_address, key=key, value=value)
+
+
+@export
+def force_update_metadata(user_address: str, key: str, value: Any):
+    assert ctx.caller == owner.get(), 'Only the owner can call force_update_metadata'
+    metadata[user_address, key] = value
+
+
+@export
+def force_update_usernames(key: str, value: Any):
+    assert ctx.caller == owner.get(), 'Only the owner can call force_update_usernames'
+    usernames[key] = value
+
 
 @export
 def change_ownership(new_owner: str):
