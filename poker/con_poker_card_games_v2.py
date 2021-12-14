@@ -118,7 +118,6 @@ def respond_to_invite(game_id: str, accept: bool):
     player_invites = players_invites[player] or []
     players = get_players_and_assert_exists(game_id)
     assert player not in players, 'You are already a part of this game.'
-    #assert len(players) < MAX_PLAYERS, f'Only {MAX_PLAYERS} are allowed to play at the same time.'
     declined = players_invites[player, 'declined'] or []
     assert game_id in player_invites or game_id in declined or games[game_id, 'public'], 'You have not been invited to this game.'
     if game_id in player_invites:
@@ -182,8 +181,6 @@ def start_game(name: str,
 
     assert ante >= 0, 'Ante must be non-negative.'
     assert creator not in other_players, f'Caller can\'t be in other_players input.'
-    #assert other_players is not None and (len(other_players) > 0), 'You cannot play by yourself!'
-    #assert len(other_players) < MAX_PLAYERS, f'Only {MAX_PLAYERS} are allowed to play at the same time.'
 
     game_id = create_game_id(name=name)
 
@@ -220,7 +217,6 @@ def add_player_to_game(game_id: str, player_to_add: str):
     invitees = games[game_id, 'invitees']
     assert player_to_add not in invitees, 'Player has already been invited.'
     invitees.append(player_to_add)
-    #assert len(players) < MAX_PLAYERS, f'Only {MAX_PLAYERS} are allowed to play at the same time.'
     games[game_id, 'invitees'] = invitees
     send_invite_requests(game_id, [player_to_add])
 
@@ -242,14 +238,12 @@ def leave_game(game_id: str):
     hand_id = games[game_id, 'current_hand']
 
     if hand_id is not None:
-        # Check some stuff
         active_players = hands[hand_id, 'active_players'] or []
         if player in active_players:
             folded = hands[hand_id, 'folded']
             all_in = hands[hand_id, 'all_in']
             next_better = hands[hand_id, 'next_better']
             if next_better == player:
-                # Check for next better before removing player from hand state
                 next_better = get_next_better(active_players, folded, all_in, player)
                 hands[hand_id, 'next_better'] = next_better
             active_players.remove(player)
@@ -306,14 +300,11 @@ def ante_up(hand_id: str):
     assert chips is not None and chips >= ante, 'You do not have enough chips.'
     active_players = hands[hand_id, 'active_players'] or []
     assert player not in active_players, 'You have already paid the ante.'
-    # Check max players
     game_type = games[game_id, 'game_type']
-
     if game_type == STUD_POKER:
         max_players = 52 // games[game_id, 'n_cards_total']
     else:
         max_players = 50
-
     assert len(active_players) < max_players, f'A maximum of {max_players} is allowed for this game type.'
     # Pay ante
     hands[hand_id, player, 'bet'] = ante
@@ -347,18 +338,10 @@ def deal_cards(hand_id: str):
     player_metadata = ForeignHash(foreign_contract=player_metadata_contract.get(), foreign_name='metadata')
 
     cards = [
-        '2c', '2d', '2h', '2s',
-        '3c', '3d', '3h', '3s',
-        '4c', '4d', '4h', '4s',
-        '5c', '5d', '5h', '5s',
-        '6c', '6d', '6h', '6s',
-        '7c', '7d', '7h', '7s',
-        '8c', '8d', '8h', '8s',
-        '9c', '9d', '9h', '9s',
-        'Tc', 'Td', 'Th', 'Ts',
-        'Jc', 'Jd', 'Jh', 'Js',
-        'Qc', 'Qd', 'Qh', 'Qs',
-        'Kc', 'Kd', 'Kh', 'Ks',
+        '2c', '2d', '2h', '2s', '3c', '3d', '3h', '3s', '4c', '4d', '4h', '4s',
+        '5c', '5d', '5h', '5s', '6c', '6d', '6h', '6s', '7c', '7d', '7h', '7s',
+        '8c', '8d', '8h', '8s', '9c', '9d', '9h', '9s', 'Tc', 'Td', 'Th', 'Ts',
+        'Jc', 'Jd', 'Jh', 'Js', 'Qc', 'Qd', 'Qh', 'Qs', 'Kc', 'Kd', 'Kh', 'Ks',
         'Ac', 'Ad', 'Ah', 'As',
     ]
     random.shuffle(cards)
@@ -650,26 +633,6 @@ def emergency_withdraw(amount: float):
         amount=amount,
         to=ctx.caller
     )
-
-@export
-def emergency_game_update(keys: list, value: Any):
-    assert ctx.caller == owner.get(), 'Only the owner can call emergency_game_update()'
-    if len(keys) == 1:
-        games[keys[0]] = value
-    elif len(keys) == 2:
-        games[keys[0], keys[1]] = value
-    elif len(keys) == 3:
-        games[keys[0], keys[1], keys[2]] = value
-
-@export
-def emergency_hand_update(keys: list, value: Any):
-    assert ctx.caller == owner.get(), 'Only the owner can call emergency_hand_update()'
-    if len(keys) == 1:
-        hands[keys[0]] = value
-    elif len(keys) == 2:
-        hands[keys[0], keys[1]] = value
-    elif len(keys) == 3:
-        hands[keys[0], keys[1], keys[2]] = value
 
 @export
 def change_ownership(new_owner: str):
