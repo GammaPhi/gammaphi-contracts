@@ -1,4 +1,4 @@
-# con_poker_card_games_v1
+# con_poker_card_games_v2
 import con_rsa_encryption as rsa
 import con_phi_lst001 as phi
 I = importlib
@@ -18,13 +18,11 @@ owner = Variable()
 MAX_RANDOM_NUMBER = 99999999
 ONE_CARD_POKER = 0
 BLIND_POKER = 1
-FIVE_CARD_STUD = 2
-SEVEN_CARD_STUD = 3
+STUD_POKER = 2
 ALL_GAME_TYPES = [
     ONE_CARD_POKER,
     BLIND_POKER,
-    FIVE_CARD_STUD,
-    SEVEN_CARD_STUD
+    STUD_POKER
 ]
 NO_LIMIT = 0
 POT_LIMIT = 1
@@ -32,12 +30,6 @@ ALL_BETTING_TYPES = [
     NO_LIMIT,
     POT_LIMIT
 ]
-MAX_PLAYERS_BY_GAME_TYPE = {
-    ONE_CARD_POKER: 50,
-    BLIND_POKER: 50,
-    FIVE_CARD_STUD: 10,
-    SEVEN_CARD_STUD: 7
-}
 
 random.seed()
 
@@ -62,8 +54,8 @@ def get_players_and_assert_exists(game_id: str) -> dict:
     assert players is not None, f'Game {game_id} does not exist.'
     return players
 
-def create_game_id(creator: str) -> str:
-    return hashlib.sha3(":".join([creator, str(now)]))
+def create_game_id(name: str) -> str:
+    return hashlib.sha3(":".join([name, str(now)]))
 
 def create_hand_id(game_id: str) -> str:
     return hashlib.sha3(":".join([game_id, str(now)]))
@@ -102,7 +94,6 @@ def add_chips_to_game(game_id: str, amount: float):
     assert phi_balances[player, ctx.this] >= amount, 'You have not approved enough for this amount of chips'
     phi.transfer_from(amount, ctx.this, player)
 
-
 @export
 def withdraw_chips_from_game(game_id: str, amount: float):
     player = ctx.caller
@@ -120,7 +111,6 @@ def withdraw_chips_from_game(game_id: str, amount: float):
         amount=amount,
         to=player
     )
-
 
 @export
 def respond_to_invite(game_id: str, accept: bool):
@@ -165,7 +155,7 @@ def send_invite_requests(game_id: str, others: list):
 def validate_game_name(name: str):
     assert name is not None and len(name) > 0, 'Game name cannot be null or empty'
     assert isinstance(name, str), 'Game name must be a string.'
-    assert len(name) <= 24, 'Game name cannot be longer than 24 characters.'
+    assert len(name) <= 36, 'Game name cannot be longer than 36 characters.'
     assert all([c.isalnum() or c in ('_', '-') for c in name]), 'Game name has invalid characters. Each character must be alphanumeric, a hyphen, or an underscore.'
     assert name[0] not in ('-', '_') and name[-1] not in ('-', '_'), 'Game name cannot start or end with a hyphen or underscore.'
     
@@ -173,24 +163,29 @@ def validate_game_name(name: str):
 def start_game(name: str, 
                other_players: list, 
                ante: float,
-               allowed_game_types: list = ALL_GAME_TYPES,
-               allowed_betting_types: list = ALL_BETTING_TYPES,
+               game_type: int,
+               bet_type: int,
+               n_cards_total: int = None,
+               n_hole_cards: int = None,
                public: bool = False) -> str:
 
     creator = ctx.caller
     
-    assert len(allowed_game_types) > 0, 'Must allow at least one game type.'
-    for game_type in allowed_game_types:
-        assert game_type in ALL_GAME_TYPES, f'Invalid game type: {game_type}.'
-    assert len(allowed_betting_types) > 0, 'Must allow at least one betting type.'
-    for bet_type in allowed_betting_types:
-        assert bet_type in ALL_BETTING_TYPES, f'Invalid betting type: {bet_type}.'
+    assert game_type in ALL_GAME_TYPES, f'Invalid game type: {game_type}.'
+    assert bet_type in ALL_BETTING_TYPES, f'Invalid betting type: {bet_type}.'
+    if game_type == STUD_POKER:
+        assert n_cards_total is not None, 'Must specify n_cards_total for stud poker.'
+        assert n_hole_cards is not None, 'Must specify n_hole_cards for stud poker.'
+        assert n_cards_total == 5 or n_cards_total == 7, 'n_cards_total must equal 5 or 7.'
+        assert n_hole_cards > 0, 'n_hole_cards must be positive.'
+        assert n_hole_cards <= n_cards_total, 'n_hole_cards must be less than or equal to n_cards_total.'        
+
     assert ante >= 0, 'Ante must be non-negative.'
     assert creator not in other_players, f'Caller can\'t be in other_players input.'
     #assert other_players is not None and (len(other_players) > 0), 'You cannot play by yourself!'
     #assert len(other_players) < MAX_PLAYERS, f'Only {MAX_PLAYERS} are allowed to play at the same time.'
 
-    game_id = create_game_id(creator=creator)
+    game_id = create_game_id(name=name)
 
     assert games[game_id, 'creator'] is None, f'Game {game_id} has already been created.'
 
@@ -203,8 +198,11 @@ def start_game(name: str,
     games[game_id, 'creator'] = creator
     games[game_id, 'invitees'] = other_players
     games[game_id, 'public'] = public
-    games[game_id, 'allowed_game_types'] = allowed_game_types
-    games[game_id, 'allowed_betting_types'] = allowed_betting_types
+    games[game_id, 'game_type'] = game_type
+    games[game_id, 'bet_type'] = bet_type
+    if game_type == STUD_POKER:
+        games[game_id, 'n_cards_total'] = n_cards_total
+        games[game_id, 'n_hole_cards'] = n_hole_cards
 
     players_games[creator] = (players_games[creator] or []) + [game_id]
     send_invite_requests(game_id, other_players)
@@ -264,15 +262,9 @@ def leave_game(game_id: str):
                 hands[hand_id, 'all_in'] = all_in
 
 @export
-def start_hand(game_id: str, game_type: int, bet_type: int) -> str:
+def start_hand(game_id: str) -> str:
     dealer = ctx.caller
     
-    allowed_game_types = games[game_id, 'allowed_game_types']
-    assert game_type in allowed_game_types, 'Invalid game type.'
-
-    allowed_betting_types = games[game_id, 'allowed_betting_types']
-    assert bet_type in allowed_betting_types, 'Invalid bet type.'
-
     players = get_players_and_assert_exists(game_id)    
     assert dealer in players, 'You are not a part of this game.'
     assert len(players) > 1, 'You cannot start a hand by yourself.'
@@ -281,13 +273,11 @@ def start_hand(game_id: str, game_type: int, bet_type: int) -> str:
     if previous_hand_id is not None:
         assert hands[previous_hand_id, 'payed_out'], 'The previous hand has not been payed out yet.'
 
-    hand_id = create_game_id(game_id)
+    hand_id = create_game_id(name=game_id)
     # Update game state
     games[game_id, 'current_hand'] = hand_id
     # Update hand state
     hands[hand_id, 'game_id'] = game_id
-    hands[hand_id, 'game_type'] = game_type
-    hands[hand_id, 'bet_type'] = bet_type
     hands[hand_id, 'dealer'] = dealer
     hands[hand_id, 'folded'] = []
     hands[hand_id, 'completed'] = False
@@ -295,6 +285,7 @@ def start_hand(game_id: str, game_type: int, bet_type: int) -> str:
     hands[hand_id, 'reached_dealer'] = False
     hands[hand_id, 'active_players'] = []
     hands[hand_id, 'current_bet'] = 0
+    hands[hand_id, 'pot'] = 0
     hands[hand_id, 'all_in'] = []
     return hand_id
 
@@ -316,8 +307,13 @@ def ante_up(hand_id: str):
     active_players = hands[hand_id, 'active_players'] or []
     assert player not in active_players, 'You have already paid the ante.'
     # Check max players
-    game_type = hands[hand_id, 'game_type']
-    max_players = MAX_PLAYERS_BY_GAME_TYPE[game_type]
+    game_type = games[game_id, 'game_type']
+
+    if game_type == STUD_POKER:
+        max_players = 52 // games[game_id, 'n_cards_total']
+    else:
+        max_players = 50
+
     assert len(active_players) < max_players, f'A maximum of {max_players} is allowed for this game type.'
     # Pay ante
     hands[hand_id, player, 'bet'] = ante
@@ -328,6 +324,7 @@ def ante_up(hand_id: str):
     active_players.sort(key=active_player_sort(players))
     hands[hand_id, 'active_players'] = active_players
     hands[hand_id, 'current_bet'] = ante
+    hands[hand_id, 'pot'] += ante
     if chips == ante:
         # All in
         all_in = hands[hand_id, 'all_in']
@@ -344,7 +341,8 @@ def deal_cards(hand_id: str):
     assert len(active_players) > 1, f'Not enough active players: {len(active_players)} <= 1'
     assert dealer in active_players, 'You are not actively part of this hand.'
 
-    game_type = hands[hand_id, 'game_type']
+    game_id = hands[hand_id, 'game_id']
+    game_type = games[game_id, 'game_type']
 
     player_metadata = ForeignHash(foreign_contract=player_metadata_contract.get(), foreign_name='metadata')
 
@@ -365,6 +363,9 @@ def deal_cards(hand_id: str):
     ]
     random.shuffle(cards)
 
+    n_cards_total = games[game_id, 'n_cards_total']
+    n_hole_cards = games[game_id, 'n_hole_cards']
+
     for i in range(len(active_players)):
         player = active_players[i]
         player_key = player_metadata[player, 'public_rsa_key']
@@ -378,16 +379,19 @@ def deal_cards(hand_id: str):
             # Player's hand is actually everyone elses hand
             player_hand = cards[0:i] + cards[i+1:len(active_players)]
             assert len(player_hand) == len(active_players)-1, f'Something went wrong. {len(player_hand)} != {len(active_players)-1}'
-        elif game_type == FIVE_CARD_STUD:
-            player_hand = cards[5*i:5*i+5]
-            assert len(player_hand) == 5, 'Something went wrong.'
-        elif game_type == SEVEN_CARD_STUD:
-            player_hand = cards[7*i:7*i+7]
-            assert len(player_hand) == 7, 'Something went wrong.'
+        elif game_type == STUD_POKER:
+            player_hand = cards[n_cards_total*i:n_cards_total*i+n_cards_total]            
+            assert len(player_hand) == n_cards_total, 'Something went wrong.'
         else:
             assert False, 'Invalid game type.'
 
         player_hand_str = ",".join(player_hand)
+
+        if n_hole_cards is not None and n_hole_cards < n_cards_total:
+            public_hand_str = ",".join(player_hand[n_hole_cards:])
+        else:
+            public_hand_str = None
+
         salt = str(random.randint(0, MAX_RANDOM_NUMBER))
 
         player_hand_str_with_salt = f'{player_hand_str}:{salt}'
@@ -402,14 +406,14 @@ def deal_cards(hand_id: str):
         # For verification purposes
         house_encrypted_hand = hashlib.sha3(player_hand_str_with_salt)
 
+        if public_hand_str is not None:
+            hands[hand_id, player, 'public_hand'] = public_hand_str
         hands[hand_id, player, 'player_encrypted_hand'] = player_encrypted_hand
         hands[hand_id, player, 'house_encrypted_hand'] = house_encrypted_hand
 
     # Update hand state
     all_in = hands[hand_id, 'all_in']
     hands[hand_id, 'next_better'] = get_next_better(active_players, [], all_in, dealer)
-    ante = games[hands[hand_id, 'game_id'], 'ante']
-    hands[hand_id, 'pot'] = ante * len(active_players)
 
 def get_next_better(players: list, folded: list, all_in: list, current_better: str) -> str:
     if len(folded) >= len(players) - 1:
@@ -475,7 +479,7 @@ def bet_check_or_fold(hand_id: str, bet: float):
             # Betting
             game_id = hands[hand_id, 'game_id']
             assert games[game_id, player] >= bet, 'You do not have enough chips to make this bet'
-            bet_type = hands[hand_id, 'bet_type']
+            bet_type = games[game_id, 'bet_type']
             if bet_type == POT_LIMIT:
                 pot = hands[hand_id, 'pot']
                 assert bet <= pot, f'Cannot overbet the pot in pot-limit mode.'
@@ -528,7 +532,8 @@ def verify_hand(hand_id: str, player_hand_str: str) -> str:
     else:
         cards = player_hand_str.split(':')[0].split(',')
 
-        game_type = hands[hand_id, 'game_type']
+        game_id = hands[hand_id, 'game_id']
+        game_type = games[game_id, 'game_type']
 
         if game_type == BLIND_POKER:
             j = 0
