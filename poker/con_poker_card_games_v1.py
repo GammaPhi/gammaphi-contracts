@@ -19,10 +19,12 @@ MAX_RANDOM_NUMBER = 99999999
 ONE_CARD_POKER = 0
 BLIND_POKER = 1
 FIVE_CARD_STUD = 2
+SEVEN_CARD_STUD = 3
 ALL_GAME_TYPES = [
     ONE_CARD_POKER,
     BLIND_POKER,
-    FIVE_CARD_STUD
+    FIVE_CARD_STUD,
+    SEVEN_CARD_STUD
 ]
 NO_LIMIT = 0
 POT_LIMIT = 1
@@ -33,7 +35,8 @@ ALL_BETTING_TYPES = [
 MAX_PLAYERS_BY_GAME_TYPE = {
     ONE_CARD_POKER: 50,
     BLIND_POKER: 50,
-    FIVE_CARD_STUD: 10
+    FIVE_CARD_STUD: 10,
+    SEVEN_CARD_STUD: 7
 }
 
 
@@ -401,6 +404,9 @@ def deal_cards(hand_id: str):
         elif game_type == FIVE_CARD_STUD:
             player_hand = cards[5*i:5*i+5]
             assert len(player_hand) == 5, 'Something went wrong.'
+        elif game_type == SEVEN_CARD_STUD:
+            player_hand = cards[7*i:7*i+7]
+            assert len(player_hand) == 7, 'Something went wrong.'
         else:
             assert False, 'Invalid game type.'
 
@@ -550,11 +556,7 @@ def verify_hand(hand_id: str, player_hand_str: str) -> str:
 
         game_type = hands[hand_id, 'game_type']
 
-        if game_type == ONE_CARD_POKER or game_type == FIVE_CARD_STUD:
-            rank = evaluate_hand(cards)
-            hands[hand_id, player, 'rank'] = rank
-            hands[hand_id, player, 'hand'] = cards
-        elif game_type == BLIND_POKER:
+        if game_type == BLIND_POKER:
             j = 0
             for p in active_players:
                 if p != player:
@@ -566,7 +568,9 @@ def verify_hand(hand_id: str, player_hand_str: str) -> str:
                             hands[hand_id, p, 'hand'] = card
                     j += 1
         else:
-            assert False, 'Invalid game type.'
+            rank = evaluate_hand(cards)
+            hands[hand_id, player, 'rank'] = rank
+            hands[hand_id, player, 'hand'] = cards
 
         return 'Verification succeeded.'
     

@@ -20,6 +20,7 @@ EVALUATOR_CONTRACT = 'con_poker_hand_evaluator_v1'
 ONE_CARD_POKER = 0
 BLIND_POKER = 1
 FIVE_CARD_STUD = 2
+SEVEN_CARD_STUD = 3
 
 
 with open(os.path.join(external_deps_dir, 'rsa', 'con_rsa_encryption.py'), 'r') as f:
@@ -121,7 +122,7 @@ class MyTestCase(unittest.TestCase):
         game_id = contract.start_game(
             name='MyGame',
             other_players=['you'],
-            allowed_game_types=[0, 1, 2],
+            allowed_game_types=[0, 1, 2, 3],
             allowed_betting_types=[0, 1],
             ante=1.0,
         )
@@ -183,7 +184,7 @@ class MyTestCase(unittest.TestCase):
             amount=100000
         )
 
-        for game_type in [ONE_CARD_POKER, BLIND_POKER, FIVE_CARD_STUD]:
+        for game_type in [ONE_CARD_POKER, BLIND_POKER, FIVE_CARD_STUD, SEVEN_CARD_STUD]:
             contract = get_contract_for_signer('me', POKER_CONTRACT)
 
             # Start a hand
@@ -237,8 +238,12 @@ class MyTestCase(unittest.TestCase):
                 expected_num_cards = 1
             elif game_type == BLIND_POKER:
                 expected_num_cards = 1
-            else:
+            elif game_type == FIVE_CARD_STUD:
                 expected_num_cards = 5
+            elif game_type == SEVEN_CARD_STUD:
+                expected_num_cards = 7
+            else:
+                raise RuntimeError("Unknown game type")
 
             my_cards = my_hand.split(':')[0].split(',')
             self.assertEqual(len(my_cards), expected_num_cards)
