@@ -39,25 +39,7 @@ MAX_PLAYERS_BY_GAME_TYPE = {
     SEVEN_CARD_STUD: 7
 }
 
-
-DECK = [
-    '2c', '2d', '2h', '2s',
-    '3c', '3d', '3h', '3s',
-    '4c', '4d', '4h', '4s',
-    '5c', '5d', '5h', '5s',
-    '6c', '6d', '6h', '6s',
-    '7c', '7d', '7h', '7s',
-    '8c', '8d', '8h', '8s',
-    '9c', '9d', '9h', '9s',
-    'Tc', 'Td', 'Th', 'Ts',
-    'Jc', 'Jd', 'Jh', 'Js',
-    'Qc', 'Qd', 'Qh', 'Qs',
-    'Kc', 'Kd', 'Kh', 'Ks',
-    'Ac', 'Ad', 'Ah', 'As',
-]
-
 random.seed()
-
 
 @construct
 def seed():
@@ -65,37 +47,30 @@ def seed():
     player_metadata_contract.set('con_gamma_phi_profile_v4')
     poker_hand_evaluator_contract.set('con_poker_hand_evaluator_v1')
 
-
 @export
 def update_player_metadata_contract(contract: str):
     assert ctx.caller == owner.get(), 'Only the owner can call update_player_metadata_contract()'
     player_metadata_contract.set(contract)
-
 
 @export
 def update_poker_hand_evaluator_contract(contract: str):
     assert ctx.caller == owner.get(), 'Only the owner can call update_player_metadata_contract()'
     poker_hand_evaluator_contract.set(contract)
 
-
 def get_players_and_assert_exists(game_id: str) -> dict:
     players = games[game_id, 'players']
     assert players is not None, f'Game {game_id} does not exist.'
     return players
 
-
 def create_game_id(creator: str) -> str:
     return hashlib.sha3(":".join([creator, str(now)]))
-
 
 def create_hand_id(game_id: str) -> str:
     return hashlib.sha3(":".join([game_id, str(now)]))
 
-
 def evaluate_hand(hand: list) -> int:
     phe = I.import_module(poker_hand_evaluator_contract.get())
     return phe.evaluate(hand)
-
 
 @export
 def game_message(game_id: str, message: str):
@@ -106,7 +81,6 @@ def game_message(game_id: str, message: str):
     messages.append(message)
     messages_hash[game_id, player] = messages
 
-
 @export
 def hand_message(hand_id: str, message: str):
     player = ctx.caller
@@ -115,7 +89,6 @@ def hand_message(hand_id: str, message: str):
     messages = messages_hash[hand_id, player] or []
     messages.append(message)
     messages_hash[hand_id, player] = messages
-
 
 @export
 def add_chips_to_game(game_id: str, amount: float):
@@ -174,7 +147,6 @@ def respond_to_invite(game_id: str, accept: bool):
             declined.append(game_id)
             players_invites[player, 'declined'] = declined
 
-
 @export
 def decline_all_invites():
     # Nuclear option
@@ -184,13 +156,11 @@ def decline_all_invites():
         players_invites[player, invite] = False
     players_invites[player] = []
     
-
 def send_invite_requests(game_id: str, others: list):
     for other in others:
         player_invites = players_invites[other] or []
         player_invites.append(game_id)
         players_invites[other] = player_invites
-
 
 def validate_game_name(name: str):
     assert name is not None and len(name) > 0, 'Game name cannot be null or empty'
@@ -199,7 +169,6 @@ def validate_game_name(name: str):
     assert all([c.isalnum() or c in ('_', '-') for c in name]), 'Game name has invalid characters. Each character must be alphanumeric, a hyphen, or an underscore.'
     assert name[0] not in ('-', '_') and name[-1] not in ('-', '_'), 'Game name cannot start or end with a hyphen or underscore.'
     
-
 @export
 def start_game(name: str, 
                other_players: list, 
@@ -242,7 +211,6 @@ def start_game(name: str,
 
     return game_id
 
-
 @export
 def add_player_to_game(game_id: str, player_to_add: str):
     player = ctx.caller
@@ -257,7 +225,6 @@ def add_player_to_game(game_id: str, player_to_add: str):
     #assert len(players) < MAX_PLAYERS, f'Only {MAX_PLAYERS} are allowed to play at the same time.'
     games[game_id, 'invitees'] = invitees
     send_invite_requests(game_id, [player_to_add])
-
 
 @export
 def leave_game(game_id: str):
@@ -296,7 +263,6 @@ def leave_game(game_id: str):
                 all_in.remove(player)
                 hands[hand_id, 'all_in'] = all_in
 
-
 @export
 def start_hand(game_id: str, game_type: int, bet_type: int) -> str:
     dealer = ctx.caller
@@ -332,12 +298,10 @@ def start_hand(game_id: str, game_type: int, bet_type: int) -> str:
     hands[hand_id, 'all_in'] = []
     return hand_id
 
-
 def active_player_sort(players: list) -> int:
     def sort(player):
         return players.index(player)
     return sort
-
 
 @export
 def ante_up(hand_id: str):
@@ -370,7 +334,6 @@ def ante_up(hand_id: str):
         all_in.append(player)
         hands[hand_id, 'all_in'] = all_in
 
-
 @export
 def deal_cards(hand_id: str):
     dealer = ctx.caller
@@ -385,7 +348,21 @@ def deal_cards(hand_id: str):
 
     player_metadata = ForeignHash(foreign_contract=player_metadata_contract.get(), foreign_name='metadata')
 
-    cards = DECK
+    cards = [
+        '2c', '2d', '2h', '2s',
+        '3c', '3d', '3h', '3s',
+        '4c', '4d', '4h', '4s',
+        '5c', '5d', '5h', '5s',
+        '6c', '6d', '6h', '6s',
+        '7c', '7d', '7h', '7s',
+        '8c', '8d', '8h', '8s',
+        '9c', '9d', '9h', '9s',
+        'Tc', 'Td', 'Th', 'Ts',
+        'Jc', 'Jd', 'Jh', 'Js',
+        'Qc', 'Qd', 'Qh', 'Qs',
+        'Kc', 'Kd', 'Kh', 'Ks',
+        'Ac', 'Ad', 'Ah', 'As',
+    ]
     random.shuffle(cards)
 
     for i in range(len(active_players)):
@@ -434,7 +411,6 @@ def deal_cards(hand_id: str):
     ante = games[hands[hand_id, 'game_id'], 'ante']
     hands[hand_id, 'pot'] = ante * len(active_players)
 
-
 def get_next_better(players: list, folded: list, all_in: list, current_better: str) -> str:
     if len(folded) >= len(players) - 1:
         return None # No one needs to bet, only one player left in the hand
@@ -444,7 +420,6 @@ def get_next_better(players: list, folded: list, all_in: list, current_better: s
     current_index = non_folded_players.index(current_better)    
     assert current_index >= 0, 'Current better has folded, which does not make sense.'
     return non_folded_players[(current_index + 1) % len(non_folded_players)]
-
 
 @export
 def bet_check_or_fold(hand_id: str, bet: float):
@@ -517,7 +492,6 @@ def bet_check_or_fold(hand_id: str, bet: float):
         
     hands[hand_id, 'next_better'] = next_better
 
-
 @export
 def verify_hand(hand_id: str, player_hand_str: str) -> str:
     player = ctx.caller
@@ -573,7 +547,6 @@ def verify_hand(hand_id: str, player_hand_str: str) -> str:
             hands[hand_id, player, 'hand'] = cards
 
         return 'Verification succeeded.'
-    
 
 def find_winners(ranks: dict, players: list) -> list:
     sorted_rank_values = sorted(ranks.keys(), reverse=True)
@@ -587,7 +560,6 @@ def find_winners(ranks: dict, players: list) -> list:
             break
     return winners
 
-
 def calculate_ranks(hand_id: str, players: list) -> dict:
     ranks = {}
     for p in players:
@@ -597,7 +569,6 @@ def calculate_ranks(hand_id: str, players: list) -> dict:
             ranks[rank] = []
         ranks[rank].append(p)
     return ranks
-
 
 @export
 def payout_hand(hand_id: str):
@@ -667,7 +638,6 @@ def payout_hand(hand_id: str):
     hands[hand_id, 'winners'] = list(payouts.keys())
     hands[hand_id, 'payed_out'] = True
 
-
 @export
 def emergency_withdraw(amount: float):
     assert ctx.caller == owner.get(), 'Only the owner can call emergency_withdraw()'
@@ -675,7 +645,6 @@ def emergency_withdraw(amount: float):
         amount=amount,
         to=ctx.caller
     )
-
 
 @export
 def emergency_game_update(keys: list, value: Any):
@@ -686,9 +655,6 @@ def emergency_game_update(keys: list, value: Any):
         games[keys[0], keys[1]] = value
     elif len(keys) == 3:
         games[keys[0], keys[1], keys[2]] = value
-    elif len(keys) == 4:
-        games[keys[0], keys[1], keys[2], keys[3]] = value
-
 
 @export
 def emergency_hand_update(keys: list, value: Any):
@@ -699,9 +665,6 @@ def emergency_hand_update(keys: list, value: Any):
         hands[keys[0], keys[1]] = value
     elif len(keys) == 3:
         hands[keys[0], keys[1], keys[2]] = value
-    elif len(keys) == 4:
-        hands[keys[0], keys[1], keys[2], keys[3]] = value
-
 
 @export
 def change_ownership(new_owner: str):
