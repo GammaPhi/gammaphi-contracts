@@ -20,7 +20,8 @@ ONE_CARD_POKER = 0
 BLIND_POKER = 1
 STUD_POKER = 2
 HOLDEM_POKER = 3
-ALL_GAME_TYPES = [ONE_CARD_POKER, BLIND_POKER, STUD_POKER, HOLDEM_POKER]
+OMAHA_POKER = 4
+ALL_GAME_TYPES = [ONE_CARD_POKER, BLIND_POKER, STUD_POKER, HOLDEM_POKER, OMAHA_POKER]
 NO_LIMIT = 0
 POT_LIMIT = 1
 ALL_BETTING_TYPES = [NO_LIMIT, POT_LIMIT]
@@ -279,6 +280,8 @@ def ante_up(hand_id: str):
         max_players = 52 // games[game_id, 'n_cards_total']
     elif game_type == HOLDEM_POKER:
         max_players = 10
+    elif game_type == OMAHA_POKER:
+        max_players = 10
     else:
         max_players = 50
     assert len(active_players) < max_players, f'A maximum of {max_players} is allowed for this game type.'
@@ -319,7 +322,7 @@ def deal_cards(hand_id: str):
     n_cards_total = games[game_id, 'n_cards_total']
     n_hole_cards = games[game_id, 'n_hole_cards']
 
-    if game_type == HOLDEM_POKER:
+    if game_type == HOLDEM_POKER or game_type == OMAHA_POKER:
         community_cards = [",".join(cards[0:3]), cards[3], cards[4]]
     else:
         community_cards = None
@@ -341,7 +344,9 @@ def deal_cards(hand_id: str):
             player_hand = cards[n_cards_total*i:n_cards_total*i+n_cards_total]            
             assert len(player_hand) == n_cards_total, 'Something went wrong.'
         elif game_type == HOLDEM_POKER:
-            player_hand = cards[5+2*i:5+2*i+2]            
+            player_hand = cards[5+2*i:5+2*i+2]
+        elif game_type == OMAHA_POKER:
+            player_hand = cards[5+4*i:5+4*i+4]
         else:
             assert False, 'Invalid game type.'
 
@@ -369,8 +374,6 @@ def deal_cards(hand_id: str):
                 community_cards[0] = otp.encrypt_hex(community_cards[0], pad1, safe=False)
                 community_cards[1] = otp.encrypt_hex(community_cards[1], pad2, safe=False)
                 community_cards[2] = otp.encrypt_hex(community_cards[2], pad3, safe=False)
-            player_hand_str_with_salt = f'{player_hand_str}:{salt}:{pad1}:{pad2}:{pad3}'
-            house_encrypted_hand = hashlib.sha3(player_hand_str_with_salt)
             pad1_with_salt = f'{pad1}:{salt1}'
             pad2_with_salt = f'{pad2}:{salt2}'
             pad3_with_salt = f'{pad3}:{salt3}'
@@ -459,7 +462,7 @@ def reveal(hand_id: str, index: int) -> str:
     hands[hand_id, 'community'] = community
 
 def handle_done_betting(hand_id: str, game_type: int, next_better: str, active_players: list, folded: list, all_in: list, dealer: str) -> str:
-    if game_type == HOLDEM_POKER:
+    if game_type == HOLDEM_POKER or game_type == OMAHA_POKER:
         # multi rounds
         round = hands[hand_id, 'round'] or 0
         round += 1
@@ -468,11 +471,12 @@ def handle_done_betting(hand_id: str, game_type: int, next_better: str, active_p
             hands[hand_id, 'completed'] = True
         else:
             # Update stuff
-            hands[hand_id, 'reached_dealer'] = False
+            hands[hand_id, 'full_circle'] = False
             evaluator = get_hand_evaluator()
             next_better = evaluator.get_next_better(
                 active_players, folded, all_in, dealer
             )
+            hands[hand_id, 'first_better'] = next_better
     else:
         hands[hand_id, 'completed'] = True
     return next_better
@@ -487,22 +491,23 @@ def bet_check_or_fold(hand_id: str, bet: float):
 
     active_players = hands[hand_id, 'active_players']
     folded = hands[hand_id, 'folded']
-
-    call_bet = hands[hand_id, 'current_bet'] or 0.0
-    player_previous_bet  = hands[hand_id, player, 'bet'] or 0.0
-    dealer = hands[hand_id, 'dealer']
-
-    if dealer == player:
-        # Been around the circle once
-        hands[hand_id, 'reached_dealer'] = True
-        reached_dealer = True
-    else:
-        reached_dealer = hands[hand_id, 'reached_dealer']
-
     all_in = hands[hand_id, 'all_in']
+
+    orig_all_in = all_in.copy()
+
+    call_bet = hands[hand_id, 'current_bet'] or 0
+    player_previous_bet  = hands[hand_id, player, 'bet'] or 0
+    dealer = hands[hand_id, 'dealer']
 
     evaluator = get_hand_evaluator()
     next_better = evaluator.get_next_better(active_players, folded, all_in, player)
+
+    if dealer == player or (next_better is not None and next_better == hands[hand_id, 'first_better']):
+        # Been around the circle once
+        hands[hand_id, 'full_circle'] = True
+        full_circle = True
+    else:
+        full_circle = hands[hand_id, 'full_circle']
 
     if next_better is None:
         # No need to bet, this is the end of the hand
@@ -510,6 +515,7 @@ def bet_check_or_fold(hand_id: str, bet: float):
     else:
         game_id = hands[hand_id, 'game_id']
         game_type = games[game_id, 'game_type']
+        next_players_bet = hands[hand_id, next_better, 'bet']
         if bet < 0:
             # Folding
             folded.append(player)
@@ -519,36 +525,35 @@ def bet_check_or_fold(hand_id: str, bet: float):
                 hands[hand_id, 'all_in'] = all_in
             if len(folded) == len(active_players) - 1:
                 hands[hand_id, 'completed'] = True
-        elif bet == 0:
-            # Checking
-            max_bet = hands[hand_id, player, 'max_bet']
-            if max_bet == player_previous_bet and player not in all_in:
-                all_in.append(player)
-                hands[hand_id, 'all_in'] = all_in
-            assert max_bet == player_previous_bet or player_previous_bet >= call_bet, 'Cannot check in this scenario. Current bet is above your bet and you are not all in.'
-            next_players_bet = hands[hand_id, next_better, 'bet']
-            if next_players_bet is not None and next_players_bet == call_bet and reached_dealer:
-                # Betting is over (TODO allow reraise)
-                next_better = handle_done_betting(hand_id, game_type, next_better, active_players, folded, all_in, dealer)
-
+            current_bet = call_bet
         else:
-            # Betting
-            assert games[game_id, player] >= bet, 'You do not have enough chips to make this bet'
-            bet_type = games[game_id, 'bet_type']
-            if bet_type == POT_LIMIT:
-                pot = hands[hand_id, 'pot']
-                assert bet <= pot, f'Cannot overbet the pot in pot-limit mode.'
-            current_bet = player_previous_bet + bet
-            max_bet = hands[hand_id, player, 'max_bet']
-            if max_bet == current_bet and player not in all_in:
-                all_in.append(player)
-                hands[hand_id, 'all_in'] = all_in
-            assert max_bet == current_bet or current_bet >= call_bet, 'Current bet is above your bet and you did not go all in.'            
-            hands[hand_id, player, 'bet'] = current_bet
-            hands[hand_id, 'current_bet'] = current_bet
-            hands[hand_id, 'pot'] += bet
-            games[game_id, player] -= bet
-        
+            if bet == 0:
+                # Checking
+                max_bet = hands[hand_id, player, 'max_bet']
+                if max_bet == player_previous_bet and player not in all_in:
+                    all_in.append(player)
+                    hands[hand_id, 'all_in'] = all_in
+                current_bet = player_previous_bet
+            else:
+                # Betting
+                assert games[game_id, player] >= bet, 'You do not have enough chips to make this bet'
+                bet_type = games[game_id, 'bet_type']
+                if bet_type == POT_LIMIT:
+                    pot = hands[hand_id, 'pot']
+                    assert bet <= pot, f'Cannot overbet the pot in pot-limit mode.'
+                current_bet = player_previous_bet + bet
+                max_bet = hands[hand_id, player, 'max_bet']
+                if max_bet == current_bet and player not in all_in:
+                    all_in.append(player)
+                    hands[hand_id, 'all_in'] = all_in
+                hands[hand_id, player, 'bet'] = current_bet
+                hands[hand_id, 'current_bet'] = current_bet
+                hands[hand_id, 'pot'] += bet
+                games[game_id, player] -= bet
+            assert max_bet == current_bet or current_bet >= call_bet, 'Current bet is above your bet and you did not go all in.'                    
+        if next_players_bet is not None and next_players_bet == current_bet and full_circle:
+            next_better = handle_done_betting(hand_id, game_type, next_better, active_players, folded, orig_all_in, dealer)
+
     hands[hand_id, 'next_better'] = next_better
 
 @export
@@ -567,7 +572,7 @@ def verify_hand(hand_id: str, player_hand_str: str) -> str:
     player_bet = hands[hand_id, player, 'bet']
     assert player_bet is not None, 'You have not bet yet.'
 
-    assert bet_should_equal == player_bet, 'Bets have not stabilized.'
+    assert bet_should_equal == player_bet or player in hands[hand_id, 'all_in'], 'Bets have not stabilized.'
 
     # For verification purposes
     house_encrypted_hand = hashlib.sha3(player_hand_str)
@@ -604,7 +609,7 @@ def verify_hand(hand_id: str, player_hand_str: str) -> str:
                             hands[hand_id, p, 'hand'] = card
                     j += 1        
         else:
-            if game_type == HOLDEM_POKER:
+            if game_type == HOLDEM_POKER or game_type == OMAHA_POKER:
                 # Add community cards
                 community = hands[hand_id, 'community']
                 assert community is not None, 'Please reveal the community cards first.'
@@ -654,24 +659,32 @@ def payout_hand(hand_id: str):
                 # Check all in amount
                 amount = hands[hand_id, player, 'max_bet']
                 all_in_map[player] = amount
-            pots = sorted(set(all_in_map.values()))
+            all_pots = sorted(all_in_map.values())
+            unique_pots = []
+            for bet in all_pots:
+                if bet not in unique_pots:
+                    unique_pots.append(bet)
             total_payed_out = 0
-            for bet in pots:
+            previous_pot_payout = 0
+            for bet in unique_pots:
                 players_in_pot = []
                 for player in remaining:
                     if player not in all_in_map or all_in_map[player] >= bet:
                         players_in_pot.append(player)
-                        pot_winners = evaluator.find_winners(ranks, players_in_pot)
-                        pot_payout = bet * len(players_in_pot)
-                        total_payed_out += pot_payout
-                        payout = pot_payout / len(pot_winners)
-                        for winner in pot_winners:
-                            if winner not in payouts:
-                                payouts[winner] = 0
-                            payouts[winner] += payout                            
+                pot_winners = evaluator.find_winners(ranks, players_in_pot)
+                pot_payout = (bet * len(players_in_pot)) - previous_pot_payout
+                total_payed_out += pot_payout
+                payout = pot_payout / len(pot_winners)
+                for winner in pot_winners:
+                    if winner not in payouts:
+                        payouts[winner] = 0
+                    payouts[winner] += payout     
+                previous_pot_payout += pot_payout
+                      
             remaining_to_payout = pot - total_payed_out
             not_all_in = set(remaining).difference(set(all_in))
-            assert remaining_to_payout == 0 or len(not_all_in) > 0, 'Invalid state when calculating side pots.'
+            assert remaining_to_payout >= 0, 'Invalid remaining to payout.'
+            assert remaining_to_payout == 0 or len(not_all_in) > 0, 'Invalid state when calculating side pots.'            
             if remaining_to_payout > 0:
                 if len(not_all_in) == 1:
                     winners = not_all_in
@@ -693,6 +706,7 @@ def payout_hand(hand_id: str):
         games[game_id, player] += payout
 
     hands[hand_id, 'winners'] = list(payouts.keys())
+    hands[hand_id, 'payouts'] = payouts
     hands[hand_id, 'payed_out'] = True
 
 @export

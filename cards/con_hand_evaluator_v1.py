@@ -214,8 +214,13 @@ def get_next_better(players: list, folded: list, all_in: list, current_better: s
     if len(players) == len(all_in):
         return None # No one needs to bet, everyone is all in
     non_folded_players = [p for p in players if p not in folded and p not in all_in]
+    if len(non_folded_players) == 1:
+        # No need to bet in this case
+        return None
+    if current_better not in non_folded_players:
+        return non_folded_players[0]
     current_index = non_folded_players.index(current_better)    
-    assert current_index >= 0, 'Current better has folded, which does not make sense.'
+    #assert current_index >= 0, 'Current better has folded, which does not make sense.'
     return non_folded_players[(current_index + 1) % len(non_folded_players)]
 
 @export

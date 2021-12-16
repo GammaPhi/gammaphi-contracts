@@ -39,7 +39,7 @@ def div_ceil(a: int, b: int) -> int:
 def encrypt(message_str: str, otp: int, safe: bool = True) -> str:
     message_bytes = message_str.encode()
     message_int = bytes2int(message_bytes)
-    key_length = byte_size(otp)
+    key_length = max(byte_size(otp), len(message_bytes))
     encrypted_int = encrypt_int(message_int, otp, safe=safe)
     encrypted_bytes = int2bytes(encrypted_int, key_length)
     return encrypted_bytes.hex()
@@ -48,7 +48,7 @@ def encrypt(message_str: str, otp: int, safe: bool = True) -> str:
 def encrypt_hex(message_str: str, otp: int, safe: bool = True) -> str:
     message_bytes = bytes.fromhex(message_str)
     message_int = bytes2int(message_bytes)
-    key_length = byte_size(otp)
+    key_length = max(byte_size(otp), len(message_bytes))
     encrypted_int = encrypt_int(message_int, otp, safe=safe)
     encrypted_bytes = int2bytes(encrypted_int, key_length)
     return encrypted_bytes.hex()
@@ -57,7 +57,7 @@ def encrypt_hex(message_str: str, otp: int, safe: bool = True) -> str:
 def decrypt(encrypted_str: str, otp: int, safe: bool = True) -> str:
     encrypted_bytes = bytes.fromhex(encrypted_str)
     encrypted_int = bytes2int(encrypted_bytes)
-    key_length = byte_size(otp)
+    key_length = max(byte_size(otp), len(encrypted_bytes))
     decrypted_int = encrypt_int(otp, encrypted_int, safe=safe)
     decrypted_bytes = int2bytes(decrypted_int, key_length)
     return decrypted_bytes.lstrip(b'\x00').decode()
@@ -66,7 +66,7 @@ def decrypt(encrypted_str: str, otp: int, safe: bool = True) -> str:
 def decrypt_hex(encrypted_str: str, otp: int, safe: bool = True) -> str:
     encrypted_bytes = bytes.fromhex(encrypted_str)
     encrypted_int = bytes2int(encrypted_bytes)
-    key_length = byte_size(otp)
+    key_length = max(byte_size(otp), len(encrypted_bytes))
     decrypted_int = encrypt_int(otp, encrypted_int, safe=safe)
     decrypted_bytes = int2bytes(decrypted_int, key_length)
     return decrypted_bytes.hex()
