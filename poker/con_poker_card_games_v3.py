@@ -1,5 +1,6 @@
-# con_poker_card_games_v2
+# con_poker_card_games_v3
 import con_rsa_encryption as rsa
+import con_otp_v1 as otp
 import con_phi_lst001 as phi
 I = importlib
 
@@ -10,26 +11,22 @@ hands = Hash(default_value=None)
 game_names = Hash(default_value=None)
 players_games = Hash(default_value=[])
 players_invites = Hash(default_value=[])
-messages_hash = Hash(default_value=[])
 player_metadata_contract = Variable()
-poker_hand_evaluator_contract = Variable()
+hand_evaluator_contract = Variable()
 owner = Variable()
 
 MAX_RANDOM_NUMBER = 99999999
 ONE_CARD_POKER = 0
 BLIND_POKER = 1
 STUD_POKER = 2
-ALL_GAME_TYPES = [
-    ONE_CARD_POKER,
-    BLIND_POKER,
-    STUD_POKER
-]
+HOLDEM_POKER = 3
+ALL_GAME_TYPES = [ONE_CARD_POKER, BLIND_POKER, STUD_POKER, HOLDEM_POKER]
 NO_LIMIT = 0
 POT_LIMIT = 1
-ALL_BETTING_TYPES = [
-    NO_LIMIT,
-    POT_LIMIT
-]
+ALL_BETTING_TYPES = [NO_LIMIT, POT_LIMIT]
+FLOP = 1
+TURN = 2
+RIVER = 3
 
 random.seed()
 
@@ -37,7 +34,7 @@ random.seed()
 def seed():
     owner.set(ctx.caller)
     player_metadata_contract.set('con_gamma_phi_profile_v4')
-    poker_hand_evaluator_contract.set('con_poker_hand_evaluator_v1')
+    hand_evaluator_contract.set('con_hand_evaluator_v1')
 
 @export
 def update_player_metadata_contract(contract: str):
@@ -47,7 +44,7 @@ def update_player_metadata_contract(contract: str):
 @export
 def update_poker_hand_evaluator_contract(contract: str):
     assert ctx.caller == owner.get(), 'Only the owner can call update_player_metadata_contract()'
-    poker_hand_evaluator_contract.set(contract)
+    hand_evaluator_contract.set(contract)
 
 def get_players_and_assert_exists(game_id: str) -> dict:
     players = games[game_id, 'players']
@@ -60,36 +57,15 @@ def create_game_id(name: str) -> str:
 def create_hand_id(game_id: str) -> str:
     return hashlib.sha3(":".join([game_id, str(now)]))
 
-def evaluate_hand(hand: list) -> int:
-    phe = I.import_module(poker_hand_evaluator_contract.get())
-    return phe.evaluate(hand)
-
-@export
-def game_message(game_id: str, message: str):
-    player = ctx.caller
-    players = get_players_and_assert_exists(game_id)
-    assert player in players, 'You do not belong to this game.'
-    messages = messages_hash[game_id, player] or []
-    messages.append(message)
-    messages_hash[game_id, player] = messages
-
-@export
-def hand_message(hand_id: str, message: str):
-    player = ctx.caller
-    active_players = hands[hand_id, 'active_players']
-    assert player in active_players, 'You do not belong to this hand.'
-    messages = messages_hash[hand_id, player] or []
-    messages.append(message)
-    messages_hash[hand_id, player] = messages
+def get_hand_evaluator():
+    return I.import_module(hand_evaluator_contract.get())
 
 @export
 def add_chips_to_game(game_id: str, amount: float):
     player = ctx.caller
     assert amount > 0, 'Amount must be a positive number'
-    
     players = get_players_and_assert_exists(game_id)
     assert player in players, 'You do not belong to this game.'
-
     games[game_id, player] = (games[game_id, player] or 0.0) + amount
     assert phi_balances[player, ctx.this] >= amount, 'You have not approved enough for this amount of chips'
     phi.transfer_from(amount, ctx.this, player)
@@ -98,14 +74,10 @@ def add_chips_to_game(game_id: str, amount: float):
 def withdraw_chips_from_game(game_id: str, amount: float):
     player = ctx.caller
     assert amount > 0, 'Amount must be a positive number'
-
     players = get_players_and_assert_exists(game_id)
     assert player in players, 'You do not belong to this game.'
-    
     current_chip_count = games[game_id, player]
-    
     assert current_chip_count >= amount, 'You cannot withdraw more than you have.'
-
     games[game_id, player] = current_chip_count - amount
     phi.transfer(
         amount=amount,
@@ -191,6 +163,7 @@ def start_game(name: str,
     game_names[name] = game_id
 
     games[game_id, 'players'] = [creator]
+    games[game_id, 'name'] = name
     games[game_id, 'ante'] = ante
     games[game_id, 'creator'] = creator
     games[game_id, 'invitees'] = other_players
@@ -244,7 +217,8 @@ def leave_game(game_id: str):
             all_in = hands[hand_id, 'all_in']
             next_better = hands[hand_id, 'next_better']
             if next_better == player:
-                next_better = get_next_better(active_players, folded, all_in, player)
+                evaluator = get_hand_evaluator()
+                next_better = evaluator.get_next_better(active_players, folded, all_in, player)
                 hands[hand_id, 'next_better'] = next_better
             active_players.remove(player)
             hands[hand_id, 'active_players'] = active_players
@@ -303,6 +277,8 @@ def ante_up(hand_id: str):
     game_type = games[game_id, 'game_type']
     if game_type == STUD_POKER:
         max_players = 52 // games[game_id, 'n_cards_total']
+    elif game_type == HOLDEM_POKER:
+        max_players = 10
     else:
         max_players = 50
     assert len(active_players) < max_players, f'A maximum of {max_players} is allowed for this game type.'
@@ -337,17 +313,16 @@ def deal_cards(hand_id: str):
 
     player_metadata = ForeignHash(foreign_contract=player_metadata_contract.get(), foreign_name='metadata')
 
-    cards = [
-        '2c', '2d', '2h', '2s', '3c', '3d', '3h', '3s', '4c', '4d', '4h', '4s',
-        '5c', '5d', '5h', '5s', '6c', '6d', '6h', '6s', '7c', '7d', '7h', '7s',
-        '8c', '8d', '8h', '8s', '9c', '9d', '9h', '9s', 'Tc', 'Td', 'Th', 'Ts',
-        'Jc', 'Jd', 'Jh', 'Js', 'Qc', 'Qd', 'Qh', 'Qs', 'Kc', 'Kd', 'Kh', 'Ks',
-        'Ac', 'Ad', 'Ah', 'As',
-    ]
-    random.shuffle(cards)
+    evaluator = get_hand_evaluator()
+    cards = evaluator.get_deck()
 
     n_cards_total = games[game_id, 'n_cards_total']
     n_hole_cards = games[game_id, 'n_hole_cards']
+
+    if game_type == HOLDEM_POKER:
+        community_cards = [",".join(cards[0:3]), cards[3], cards[4]]
+    else:
+        community_cards = None
 
     for i in range(len(active_players)):
         player = active_players[i]
@@ -365,6 +340,8 @@ def deal_cards(hand_id: str):
         elif game_type == STUD_POKER:
             player_hand = cards[n_cards_total*i:n_cards_total*i+n_cards_total]            
             assert len(player_hand) == n_cards_total, 'Something went wrong.'
+        elif game_type == HOLDEM_POKER:
+            player_hand = cards[5+2*i:5+2*i+2]            
         else:
             assert False, 'Invalid game type.'
 
@@ -377,8 +354,50 @@ def deal_cards(hand_id: str):
 
         salt = str(random.randint(0, MAX_RANDOM_NUMBER))
 
+        if community_cards is not None:
+            pad1 = otp.generate_otp(80)
+            pad2 = otp.generate_otp(20)
+            pad3 = otp.generate_otp(20)
+            salt1 = str(random.randint(0, MAX_RANDOM_NUMBER))
+            salt2 = str(random.randint(0, MAX_RANDOM_NUMBER))
+            salt3 = str(random.randint(0, MAX_RANDOM_NUMBER))
+            if i == 0:
+                community_cards[0] = otp.encrypt(community_cards[0], pad1, safe=False)
+                community_cards[1] = otp.encrypt(community_cards[1], pad2, safe=False)
+                community_cards[2] = otp.encrypt(community_cards[2], pad3, safe=False)
+            else:
+                community_cards[0] = otp.encrypt_hex(community_cards[0], pad1, safe=False)
+                community_cards[1] = otp.encrypt_hex(community_cards[1], pad2, safe=False)
+                community_cards[2] = otp.encrypt_hex(community_cards[2], pad3, safe=False)
+            player_hand_str_with_salt = f'{player_hand_str}:{salt}:{pad1}:{pad2}:{pad3}'
+            house_encrypted_hand = hashlib.sha3(player_hand_str_with_salt)
+            pad1_with_salt = f'{pad1}:{salt1}'
+            pad2_with_salt = f'{pad2}:{salt2}'
+            pad3_with_salt = f'{pad3}:{salt3}'
+            encrypted_pad1 = rsa.encrypt(
+                message_str=pad1_with_salt,
+                n=int(keys[0]),
+                e=int(keys[1])    
+            )
+            encrypted_pad2 = rsa.encrypt(
+                message_str=pad2_with_salt,
+                n=int(keys[0]),
+                e=int(keys[1])    
+            )
+            encrypted_pad3 = rsa.encrypt(
+                message_str=pad3_with_salt,
+                n=int(keys[0]),
+                e=int(keys[1])    
+            )
+            hands[hand_id, player, 'player_encrypted_pad1'] = encrypted_pad1
+            hands[hand_id, player, 'player_encrypted_pad2'] = encrypted_pad2
+            hands[hand_id, player, 'player_encrypted_pad3'] = encrypted_pad3
+            hands[hand_id, player, 'house_encrypted_pad1'] = hashlib.sha3(pad1_with_salt)
+            hands[hand_id, player, 'house_encrypted_pad2'] = hashlib.sha3(pad2_with_salt)
+            hands[hand_id, player, 'house_encrypted_pad3'] = hashlib.sha3(pad3_with_salt)
+
         player_hand_str_with_salt = f'{player_hand_str}:{salt}'
-        
+
         # Encrypt players hand with their personal keys
         player_encrypted_hand = rsa.encrypt(
             message_str=player_hand_str_with_salt,
@@ -396,17 +415,67 @@ def deal_cards(hand_id: str):
 
     # Update hand state
     all_in = hands[hand_id, 'all_in']
-    hands[hand_id, 'next_better'] = get_next_better(active_players, [], all_in, dealer)
+    hands[hand_id, 'next_better'] = evaluator.get_next_better(active_players, [], all_in, dealer)
+    if community_cards is not None:
+        hands[hand_id, 'community_encrypted'] = community_cards
+        hands[hand_id, 'community'] = [None, None, None]
 
-def get_next_better(players: list, folded: list, all_in: list, current_better: str) -> str:
-    if len(folded) >= len(players) - 1:
-        return None # No one needs to bet, only one player left in the hand
-    if len(players) == len(all_in):
-        return None # No one needs to bet, everyone is all in
-    non_folded_players = [p for p in players if p not in folded and p not in all_in]
-    current_index = non_folded_players.index(current_better)    
-    assert current_index >= 0, 'Current better has folded, which does not make sense.'
-    return non_folded_players[(current_index + 1) % len(non_folded_players)]
+@export
+def reveal_otp(hand_id: str, pad: int, salt: int, index: int):
+    player = ctx.caller
+    assert index in (FLOP, TURN, RIVER), 'Invalid index.'
+    active_players = hands[hand_id, 'active_players']
+    assert active_players is not None, 'This hand does not exist.'
+    player_index = active_players.index(player)
+    assert player_index >= 0, 'You are not in this hand.'
+    # verify authenticity of key
+    assert hashlib.sha3(f'{pad}:{salt}') == hands[hand_id, player, f'house_encrypted_pad{index}'], 'Invalid key or salt.'
+    hands[hand_id, player, f'pad{index}'] = pad
+
+@export
+def reveal(hand_id: str, index: int) -> str:
+    assert index in (FLOP, TURN, RIVER), 'Invalid index.'
+    active_players = hands[hand_id, 'active_players']
+    community = hands[hand_id, 'community']
+    enc = hands[hand_id, 'community_encrypted'][index-1]
+    n_players = len(active_players)
+    for i in range(n_players):
+        player = active_players[-1-i]
+        pad = hands[hand_id, player, f'pad{index}']
+        assert pad is not None, f'Player {player} has not revealed their pad.'
+        if i != n_players - 1:
+            enc = otp.decrypt_hex(
+                encrypted_str=enc,
+                otp=pad,
+                safe=False
+            )
+        else:
+            enc = otp.decrypt(
+                encrypted_str=enc,
+                otp=pad,
+                safe=False
+            )
+    community[index-1] = enc
+    hands[hand_id, 'community'] = community
+
+def handle_done_betting(hand_id: str, game_type: int, next_better: str, active_players: list, folded: list, all_in: list, dealer: str) -> str:
+    if game_type == HOLDEM_POKER:
+        # multi rounds
+        round = hands[hand_id, 'round'] or 0
+        round += 1
+        hands[hand_id, 'round'] = round
+        if round == 4:
+            hands[hand_id, 'completed'] = True
+        else:
+            # Update stuff
+            hands[hand_id, 'reached_dealer'] = False
+            evaluator = get_hand_evaluator()
+            next_better = evaluator.get_next_better(
+                active_players, folded, all_in, dealer
+            )
+    else:
+        hands[hand_id, 'completed'] = True
+    return next_better
 
 @export
 def bet_check_or_fold(hand_id: str, bet: float):
@@ -431,13 +500,16 @@ def bet_check_or_fold(hand_id: str, bet: float):
         reached_dealer = hands[hand_id, 'reached_dealer']
 
     all_in = hands[hand_id, 'all_in']
-    next_better = get_next_better(active_players, folded, all_in, player)
+
+    evaluator = get_hand_evaluator()
+    next_better = evaluator.get_next_better(active_players, folded, all_in, player)
 
     if next_better is None:
         # No need to bet, this is the end of the hand
         hands[hand_id, 'completed'] = True
-
     else:
+        game_id = hands[hand_id, 'game_id']
+        game_type = games[game_id, 'game_type']
         if bet < 0:
             # Folding
             folded.append(player)
@@ -457,10 +529,10 @@ def bet_check_or_fold(hand_id: str, bet: float):
             next_players_bet = hands[hand_id, next_better, 'bet']
             if next_players_bet is not None and next_players_bet == call_bet and reached_dealer:
                 # Betting is over (TODO allow reraise)
-                hands[hand_id, 'completed'] = True
+                next_better = handle_done_betting(hand_id, game_type, next_better, active_players, folded, all_in, dealer)
+
         else:
             # Betting
-            game_id = hands[hand_id, 'game_id']
             assert games[game_id, player] >= bet, 'You do not have enough chips to make this bet'
             bet_type = games[game_id, 'bet_type']
             if bet_type == POT_LIMIT:
@@ -518,35 +590,31 @@ def verify_hand(hand_id: str, player_hand_str: str) -> str:
         game_id = hands[hand_id, 'game_id']
         game_type = games[game_id, 'game_type']
 
+        evaluator = get_hand_evaluator()
+
         if game_type == BLIND_POKER:
             j = 0
             for p in active_players:
                 if p != player:
                     if p not in folded:
                         card = cards[j]
-                        rank = evaluate_hand([card])
+                        rank = evaluator.evaluate([card])
                         if hands[hand_id, p, 'rank'] is None:
                             hands[hand_id, p, 'rank'] = rank
                             hands[hand_id, p, 'hand'] = card
-                    j += 1
+                    j += 1        
         else:
-            rank = evaluate_hand(cards)
+            if game_type == HOLDEM_POKER:
+                # Add community cards
+                community = hands[hand_id, 'community']
+                assert community is not None, 'Please reveal the community cards first.'
+                cards.extend(community[0].split(','))
+                cards.extend(community[1:])
+            rank = evaluator.evaluate(cards)
             hands[hand_id, player, 'rank'] = rank
             hands[hand_id, player, 'hand'] = cards
 
         return 'Verification succeeded.'
-
-def find_winners(ranks: dict, players: list) -> list:
-    sorted_rank_values = sorted(ranks.keys(), reverse=True)
-    player_set = set(players)
-    for rank in sorted_rank_values:
-        players_with_rank = ranks[rank]
-        intersection = player_set.intersection(set(players_with_rank))
-        if len(intersection) > 0:
-            # Found players
-            winners = list(intersection)
-            break
-    return winners
 
 def calculate_ranks(hand_id: str, players: list) -> dict:
     ranks = {}
@@ -577,6 +645,7 @@ def payout_hand(hand_id: str):
         # Just pay out, everyone else folded
         payouts[remaining[0]] = pot
     else:
+        evaluator = get_hand_evaluator()
         ranks = calculate_ranks(hand_id, remaining)
         if len(all_in) > 0:
             # Need to calculate split pots
@@ -592,7 +661,7 @@ def payout_hand(hand_id: str):
                 for player in remaining:
                     if player not in all_in_map or all_in_map[player] >= bet:
                         players_in_pot.append(player)
-                        pot_winners = find_winners(ranks, players_in_pot)
+                        pot_winners = evaluator.find_winners(ranks, players_in_pot)
                         pot_payout = bet * len(players_in_pot)
                         total_payed_out += pot_payout
                         payout = pot_payout / len(pot_winners)
@@ -607,14 +676,14 @@ def payout_hand(hand_id: str):
                 if len(not_all_in) == 1:
                     winners = not_all_in
                 else:
-                    winners = find_winners(ranks, not_all_in)
+                    winners = evaluator.find_winners(ranks, not_all_in)
                 payout = remaining_to_payout / len(winners)
                 for winner in winners:
                     if winner not in payouts:
                         payouts[winner] = 0
                     payouts[winner] += payout
         else:
-            winners = find_winners(ranks, remaining)
+            winners = evaluator.find_winners(ranks, remaining)
             payout = pot / len(winners)
             for winner in winners:
                 payouts[winner] = payout
@@ -637,5 +706,4 @@ def emergency_withdraw(amount: float):
 @export
 def change_ownership(new_owner: str):
     assert ctx.caller == owner.get(), 'Only the owner can change ownership!'
-
     owner.set(new_owner)

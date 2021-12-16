@@ -1,4 +1,5 @@
-# con_poker_hand_evaluator_v1
+# con_hand_evaluator_v1
+random.seed()
 NUM_CARDS_IN_DECK = 52
 NUM_VALUES_IN_DECK = 13
 NUM_SUITS_IN_DECK = 4
@@ -193,22 +194,33 @@ def evaluate(hand: list) -> int:
         else:
             assert False, 'Invalid number of cards specified: {}'.format(len(hand))
 
+@export
+def find_winners(ranks: dict, players: list) -> list:
+    sorted_rank_values = sorted(ranks.keys(), reverse=True)
+    player_set = set(players)
+    for rank in sorted_rank_values:
+        players_with_rank = ranks[rank]
+        intersection = player_set.intersection(set(players_with_rank))
+        if len(intersection) > 0:
+            # Found players
+            winners = list(intersection)
+            break
+    return winners
 
-'''if __name__ == '__main__':
-    hands = [
-        ['Ac', 'Kc', 'Qc', 'Jc', 'Tc'],
-        ['9c', 'Kc', 'Qc', 'Jc', 'Tc'],
-        ['Ac', 'Ah', 'As', 'Ad', 'Tc'],
-        ['Ac', 'Ah', 'As', 'Td', 'Tc'],
-        ['As', 'Kc', 'Qc', 'Jc', 'Tc'],
-        ['As', 'Kh', 'Qd', 'Jc', 'Tc'],
-        ['Ah', '2d', '3c', '4c', '5c'],
-        ['2h', '2d', '3c', '4c', '5c'],
-        ['7h', '2d', '3c', '4c', '5c'],
-        ['7h', '2d', '3c', '4c', '5c', '6d', 'Kh'],
-        ['7h', '2d', '6c', '4c', '6c', '6d', 'Kh', '7s', '7d'],
-    ]
+@export
+def get_next_better(players: list, folded: list, all_in: list, current_better: str) -> str:
+    if len(folded) >= len(players) - 1:
+        return None # No one needs to bet, only one player left in the hand
+    if len(players) == len(all_in):
+        return None # No one needs to bet, everyone is all in
+    non_folded_players = [p for p in players if p not in folded and p not in all_in]
+    current_index = non_folded_players.index(current_better)    
+    assert current_index >= 0, 'Current better has folded, which does not make sense.'
+    return non_folded_players[(current_index + 1) % len(non_folded_players)]
 
-    for hand in hands:
-        #hand = [DECK.index(c) for c in hand]
-        print(evaluate(hand))'''
+@export
+def get_deck(shuffled: bool = True) -> list:
+    cards = DECK.copy()
+    if shuffled:
+        random.shuffle(cards)
+    return cards

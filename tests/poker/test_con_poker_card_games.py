@@ -12,19 +12,25 @@ client = ContractingClient()
 module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'poker')
 external_deps_dir = os.path.dirname(module_dir)
 
-POKER_CONTRACT = 'con_poker_card_games_v2'
+POKER_CONTRACT = 'con_poker_card_games_v3'
 PHI_CONTRACT = 'con_phi_lst001'
 RSA_CONTRACT = 'con_rsa_encryption'
 PROFILE_CONTRACT = 'con_gamma_phi_profile_v4'
-EVALUATOR_CONTRACT = 'con_poker_hand_evaluator_v1'
+EVALUATOR_CONTRACT = 'con_hand_evaluator_v1'
+OTP_CONTRACT = 'con_otp_v1'
 ONE_CARD_POKER = 0
 BLIND_POKER = 1
 STUD_POKER = 2
+HOLDEM_POKER = 3
 
 
-with open(os.path.join(external_deps_dir, 'rsa', 'con_rsa_encryption.py'), 'r') as f:
+with open(os.path.join(external_deps_dir, 'rsa', f'{RSA_CONTRACT}.py'), 'r') as f:
     code = f.read()
-    client.submit(code, name='con_rsa_encryption')
+    client.submit(code, name=RSA_CONTRACT)
+
+with open(os.path.join(external_deps_dir, 'otp', f'{OTP_CONTRACT}.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=OTP_CONTRACT)
 
 with open(os.path.join(external_deps_dir, 'core', 'con_phi_lst001.py'), 'r') as f:
     code = f.read()
@@ -113,7 +119,7 @@ setup()
 
 class MyTestCase(unittest.TestCase):
     def test_simple_1_card_game(self):
-        for game_type in [ONE_CARD_POKER, BLIND_POKER, STUD_POKER]:
+        for game_type in [HOLDEM_POKER, ONE_CARD_POKER, BLIND_POKER, STUD_POKER]:
             phi = get_contract_for_signer('me', PHI_CONTRACT)
 
             if game_type == STUD_POKER:
@@ -246,6 +252,8 @@ class MyTestCase(unittest.TestCase):
                     expected_num_cards = 1
                 elif game_type == BLIND_POKER:
                     expected_num_cards = 1
+                elif game_type == HOLDEM_POKER:
+                    expected_num_cards = 2
                 elif game_type == STUD_POKER:
                     expected_num_cards = n_cards_totals[r]
                 else:
@@ -306,6 +314,80 @@ class MyTestCase(unittest.TestCase):
                     bet=0
                 )
 
+
+                # Holdem specific checks
+                if game_type == HOLDEM_POKER:
+                    community_encrypted = contract.quick_read('hands', hand_id, ['community_encrypted'])
+                    print(community_encrypted)
+                    community = []
+                    for i in range(1, 4):
+                        my_pad1 = contract.quick_read('hands', hand_id, ['me', f'player_encrypted_pad{i}'])
+                        your_pad1 = contract.quick_read('hands', hand_id, ['you', f'player_encrypted_pad{i}'])
+                        my_pad1 = rsa.decrypt(bytes.fromhex(my_pad1), my_sk).decode('utf-8')
+                        your_pad1 = rsa.decrypt(bytes.fromhex(your_pad1), your_sk).decode('utf-8')
+                        #print(my_pad1)
+                        #print(your_pad1)
+                        mp1 = int(my_pad1.split(':')[0])
+                        yp1 = int(your_pad1.split(':')[0])
+                        ms1 = int(my_pad1.split(':')[1])
+                        ys1 = int(your_pad1.split(':')[1])
+                        otp = client.get_contract(OTP_CONTRACT)
+                        c1 = community_encrypted[i-1]
+                        _c1 = otp.decrypt_hex(
+                            encrypted_str=c1,
+                            otp=yp1,
+                            safe=False
+                        )
+                        __c1 = otp.decrypt(
+                            encrypted_str=_c1,
+                            otp=mp1,
+                            safe=False
+                        )
+                        community.append(__c1)
+                        contract = get_contract_for_signer('me', POKER_CONTRACT)
+                        contract.reveal_otp(
+                            hand_id=hand_id,
+                            pad=mp1,
+                            salt=ms1,
+                            index=i
+                        )
+                        contract = get_contract_for_signer('you', POKER_CONTRACT)
+                        contract.reveal_otp(
+                            hand_id=hand_id,
+                            pad=yp1,
+                            salt=ys1,
+                            index=i
+                        )
+                        contract = get_contract_for_signer('me', POKER_CONTRACT)
+                        contract.reveal(
+                            hand_id=hand_id,
+                            index=i
+                        )
+
+                        # Bet
+                        contract = get_contract_for_signer('you', POKER_CONTRACT)
+                        contract.bet_check_or_fold(
+                            hand_id=hand_id,
+                            bet=5.0
+                        )
+                        
+                        # Check
+                        contract = get_contract_for_signer('me', POKER_CONTRACT)
+                        contract.bet_check_or_fold(
+                            hand_id=hand_id,
+                            bet=5.0
+                        )
+                        contract = get_contract_for_signer('you', POKER_CONTRACT)
+                        contract.bet_check_or_fold(
+                            hand_id=hand_id,
+                            bet=0.0
+                        )
+                        contract = get_contract_for_signer('me', POKER_CONTRACT)
+                        round = contract.quick_read('hands', hand_id, ['round'])
+                        self.assertEqual(round, i+1)
+
+                    print(community)
+
                 # Verify hand publicly
                 contract = get_contract_for_signer('you', POKER_CONTRACT)
                 contract.verify_hand(
@@ -318,6 +400,7 @@ class MyTestCase(unittest.TestCase):
                     hand_id=hand_id,
                     player_hand_str=my_hand
                 )
+
 
                 # Payout hand
                 contract.payout_hand(
