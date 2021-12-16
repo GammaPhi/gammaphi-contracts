@@ -613,6 +613,7 @@ def verify_hand(hand_id: str, player_hand_str: str) -> str:
                 # Add community cards
                 community = hands[hand_id, 'community']
                 assert community is not None, 'Please reveal the community cards first.'
+                assert community[0] is not None and community[1] is not None and community[2] is not None, 'Please reveal all community cards.'
                 cards.extend(community[0].split(','))
                 cards.extend(community[1:])
             rank = evaluator.evaluate(cards)
