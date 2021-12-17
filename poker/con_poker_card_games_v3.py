@@ -21,7 +21,7 @@ owner = Variable()
 def seed():
     owner.set(ctx.caller)
     player_metadata_contract.set('con_gamma_phi_profile_v4')
-    hand_controller_contract.set('con_poker_hand_controller_v1')
+    hand_controller_contract.set('con_poker_hand_controller_v2')
     game_controller_contract.set('con_poker_game_controller_v1')
 
 @export

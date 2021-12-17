@@ -1,4 +1,4 @@
-# con_poker_hand_controller_v1
+# con_poker_hand_controller_v2
 
 import con_rsa_encryption as rsa
 import con_otp_v1 as otp
@@ -336,13 +336,13 @@ def reveal(hand_id: str, index: int, hands: Any) -> str:
         if i != n_players - 1:
             enc = otp.decrypt_hex(
                 encrypted_str=enc,
-                otp=pad,
+                otp=int(pad),
                 safe=False
             )
         else:
             enc = otp.decrypt(
                 encrypted_str=enc,
-                otp=pad,
+                otp=int(pad),
                 safe=False
             )
     community[index-1] = enc
