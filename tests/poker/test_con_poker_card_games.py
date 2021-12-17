@@ -13,6 +13,8 @@ module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'poker')
 external_deps_dir = os.path.dirname(module_dir)
 
 POKER_CONTRACT = 'con_poker_card_games_v3'
+GAME_CONTROLLER_CONTRACT = 'con_poker_game_controller_v1'
+HAND_CONTROLLER_CONTRACT = 'con_poker_hand_controller_v1'
 PHI_CONTRACT = 'con_phi_lst001'
 RSA_CONTRACT = 'con_rsa_encryption'
 PROFILE_CONTRACT = 'con_gamma_phi_profile_v4'
@@ -37,9 +39,9 @@ with open(os.path.join(external_deps_dir, 'otp', f'{OTP_CONTRACT}.py'), 'r') as 
     code = f.read()
     client.submit(code, name=OTP_CONTRACT)
 
-with open(os.path.join(external_deps_dir, 'core', 'con_phi_lst001.py'), 'r') as f:
+with open(os.path.join(external_deps_dir, 'core', f'{PHI_CONTRACT}.py'), 'r') as f:
     code = f.read()
-    client.submit(code, name='con_phi_lst001', signer=ME)
+    client.submit(code, name=PHI_CONTRACT, signer=ME)
 
 with open(os.path.join(external_deps_dir, 'core', f'{PROFILE_CONTRACT}.py'), 'r') as f:
     code = f.read()
@@ -52,6 +54,14 @@ with open(os.path.join(external_deps_dir, 'cards', f'{EVALUATOR_CONTRACT}.py'), 
 with open(os.path.join(module_dir, f'{POKER_CONTRACT}.py'), 'r') as f:
     code = f.read()
     client.submit(code, name=POKER_CONTRACT)
+
+with open(os.path.join(module_dir, f'{HAND_CONTROLLER_CONTRACT}.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=HAND_CONTROLLER_CONTRACT, owner=POKER_CONTRACT)
+
+with open(os.path.join(module_dir, f'{GAME_CONTROLLER_CONTRACT}.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=GAME_CONTROLLER_CONTRACT, owner=POKER_CONTRACT)
 
 
 # Generate keys with rsa library
@@ -93,11 +103,13 @@ def setup_game(creator: str, other_players: list, **kwargs):
     game_id = contract.start_game(
         name=f'MyGame-{str(uuid.uuid4())[:12]}',
         other_players=other_players,
-        game_type=kwargs['game_type'],
-        n_hole_cards=kwargs.get('n_hole_cards'),
-        n_cards_total=kwargs.get('n_card_totals'),
-        bet_type=kwargs.get('bet_type', 0),
-        ante=kwargs.get('ante', 1.0),
+        game_config=dict(
+            game_type=kwargs['game_type'],
+            n_hole_cards=kwargs.get('n_hole_cards'),
+            n_cards_total=kwargs.get('n_card_totals'),
+            bet_type=kwargs.get('bet_type', 0),
+            ante=kwargs.get('ante', 1.0),
+        )       
     )
 
     contract.add_chips_to_game(
@@ -364,11 +376,13 @@ class MyTestCase(unittest.TestCase):
                 game_id = contract.start_game(
                     name=f'MyGame-{str(uuid.uuid4())[:12]}',
                     other_players=[OTHER_PLAYERS[0]],
-                    game_type=game_type,
-                    n_hole_cards=n_hole_cards[r],
-                    n_cards_total=n_cards_totals[r],
-                    bet_type=0,
-                    ante=1.0,
+                    game_config=dict(
+                        game_type=game_type,
+                        n_hole_cards=n_hole_cards[r],
+                        n_cards_total=n_cards_totals[r],
+                        bet_type=0,
+                        ante=1.0,
+                    )
                 )
 
                 # Verify game state
