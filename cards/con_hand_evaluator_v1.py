@@ -194,34 +194,6 @@ def evaluate(hand: list) -> int:
         else:
             assert False, 'Invalid number of cards specified: {}'.format(len(hand))
 
-@export
-def find_winners(ranks: dict, players: list) -> list:
-    sorted_rank_values = sorted(ranks.keys(), reverse=True)
-    player_set = set(players)
-    for rank in sorted_rank_values:
-        players_with_rank = ranks[rank]
-        intersection = player_set.intersection(set(players_with_rank))
-        if len(intersection) > 0:
-            # Found players
-            winners = list(intersection)
-            break
-    return winners
-
-@export
-def get_next_better(players: list, folded: list, all_in: list, current_better: str) -> str:
-    if len(folded) >= len(players) - 1:
-        return None # No one needs to bet, only one player left in the hand
-    if len(players) == len(all_in):
-        return None # No one needs to bet, everyone is all in
-    non_folded_players = [p for p in players if p not in folded and p not in all_in]
-    if len(non_folded_players) == 1:
-        # No need to bet in this case
-        return None
-    if current_better not in non_folded_players:
-        return non_folded_players[0]
-    current_index = non_folded_players.index(current_better)    
-    #assert current_index >= 0, 'Current better has folded, which does not make sense.'
-    return non_folded_players[(current_index + 1) % len(non_folded_players)]
 
 @export
 def get_deck(shuffled: bool = True) -> list:

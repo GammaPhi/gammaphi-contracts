@@ -7,12 +7,24 @@ from os.path import dirname, abspath, join
 
 client = ContractingClient()
 
-module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'core')
+module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'profile')
+
+PROFILE_CONTRACT = 'con_gamma_phi_profile_v4'
+PROFILE_IMPL_CONTRACT = 'con_gamma_phi_profile_impl_v1'
 
 
-with open(os.path.join(module_dir, 'con_gamma_phi_profile_v2.py'), 'r') as f:
+with open(os.path.join(module_dir, f'{PROFILE_CONTRACT}.py'), 'r') as f:
     code = f.read()
-    client.submit(code, name='con_gamma_phi_profile', signer='me')
+    client.submit(code, name=PROFILE_CONTRACT, signer='me')
+
+
+with open(os.path.join(module_dir, f'{PROFILE_IMPL_CONTRACT}.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=PROFILE_IMPL_CONTRACT, owner=PROFILE_CONTRACT, signer='me')
+
+client.signer = 'me'
+contract = client.get_contract(PROFILE_CONTRACT)
+contract.register_action(action='profile', contract=PROFILE_IMPL_CONTRACT)
 
 
 # Generate keys with rsa library
@@ -23,22 +35,26 @@ def generate_keys():
 class MyTestCase(unittest.TestCase):
     def setUp(self):
         client.signer = "you"
-        self.contract = client.get_contract('con_gamma_phi_profile')
+        self.contract = client.get_contract(PROFILE_CONTRACT)
 
     def test_create_simple_profile(self):
         n = self.contract.quick_read('total_users')
-        self.contract.create_profile(
-            username='hello123',
-            #display_name=None,
-            #telegram=None,
-            #twitter=None,
-            #instagram=None,
-            #facebook=None,
-            #discord=None,
-            #icon_base64_svg=None,
-            #icon_base64_png=None,
-            #icon_url=None,
-            #public_rsa_key=None
+        self.contract.interact(
+            action='profile',
+            payload=dict(
+                action="create_profile",
+                username='hello123',
+                #display_name=None,
+                #telegram=None,
+                #twitter=None,
+                #instagram=None,
+                #facebook=None,
+                #discord=None,
+                #icon_base64_svg=None,
+                #icon_base64_png=None,
+                #icon_url=None,
+                #public_rsa_key=None
+            )
         )
 
         self.assertEqual('hello123', self.contract.quick_read('metadata', 'you', ['username']))
@@ -48,19 +64,27 @@ class MyTestCase(unittest.TestCase):
 
     def test_change_username(self):
         client.signer = "a1"
-        contract = client.get_contract('con_gamma_phi_profile')
+        contract = client.get_contract(PROFILE_CONTRACT)
 
-        contract.create_profile(
-            username='u1',
+        contract.interact(
+            action='profile',
+            payload=dict(
+                action='create_profile',
+                username='u1',
+            )
         )
 
         self.assertEqual('u1', contract.quick_read('metadata', 'a1', ['username']))
         self.assertEqual('u1', contract.quick_read('metadata', 'a1', ['display_name']))
         self.assertEqual('a1', contract.quick_read('usernames', 'u1'))
 
-        contract.update_profile(
-            key='username',
-            value='u2',
+        contract.interact(
+            action='profile',
+            payload=dict(
+                action='update_profile',
+                key='username',
+                value='u2',
+            )
         )
 
         self.assertEqual('u2', contract.quick_read('metadata', 'a1', ['username']))
@@ -70,30 +94,50 @@ class MyTestCase(unittest.TestCase):
 
     def test_frens(self):
         client.signer = "someone"
-        contract = client.get_contract('con_gamma_phi_profile')
-        contract.create_profile(
-            username='hello',
+        contract = client.get_contract(PROFILE_CONTRACT)
+        contract.interact(
+            action='profile',
+            payload=dict(
+                action='create_profile',
+                username='hello',
+            )
         )
 
         client.signer = "me"
-        contract = client.get_contract('con_gamma_phi_profile')
-        contract.create_profile(
-            username='me123',
+        contract = client.get_contract(PROFILE_CONTRACT)
+        contract.interact(
+            action='profile',
+            payload=dict(
+                action='create_profile',
+                username='hello2',
+            )
         )
 
         self.assertEqual(0, len(contract.quick_read('metadata', 'me', ['frens'])))
-        contract.add_frens(
-            frens=['someone']
+        contract.interact(
+            action='profile',
+            payload=dict(
+                action='add_frens',
+                frens=['someone']
+            )
         )
         self.assertEqual(1, len(contract.quick_read('metadata', 'me', ['frens'])))
         self.assertEqual('someone', contract.quick_read('metadata', 'me', ['frens'])[0])
 
-        contract.remove_frens(
-            frens=['someone']
+        contract.interact(
+            action='profile',
+            payload=dict(
+                action='remove_frens',
+                frens=['someone']
+            )
         )
         self.assertEqual(0, len(contract.quick_read('metadata', 'me', ['frens'])))
-        contract.add_frens(
-            frens=['hello']
+        contract.interact(
+            action='profile',
+            payload=dict(
+                action='add_frens',
+                frens=['hello']
+            )
         )
         self.assertEqual(1, len(contract.quick_read('metadata', 'me', ['frens'])))
         self.assertEqual('someone', contract.quick_read('metadata', 'me', ['frens'])[0])
@@ -104,43 +148,75 @@ class MyTestCase(unittest.TestCase):
     def test_create_profile_with_invalid_username(self):
         self.assertRaises(
             Exception, 
-            self.contract.create_profile,
-            username='_something'
+            self.contract.interact,
+            action='profile',
+            payload=dict(
+                action='create_profile',
+                username='_something'
+            )
         )
         self.assertRaises(
             Exception, 
-            self.contract.create_profile,
-            username='-something'
+            self.contract.interact,
+            action='profile',
+            payload=dict(
+                action='create_profile',
+                username='-something'
+            )    
         )
         self.assertRaises(
             Exception, 
-            self.contract.create_profile,
-            username='some.thing'
+            self.contract.interact,
+            action='profile',
+            payload=dict(
+                action='create_profile',
+                username='some.thing'
+            )  
         )
         self.assertRaises(
             Exception, 
-            self.contract.create_profile,
-            username='some thing'
+            self.contract.interact,
+            action='profile',
+            payload=dict(
+                action='create_profile',
+                username='some thing'
+            )  
         )
         self.assertRaises(
             Exception, 
-            self.contract.create_profile,
-            username=''
+            self.contract.interact,
+            action='profile',
+            payload=dict(
+                action='create_profile',
+                username=''
+            )  
         )
         self.assertRaises(
             Exception, 
-            self.contract.create_profile,
-            username=None
+            self.contract.interact,
+            action='profile',
+            payload=dict(
+                action='create_profile',
+                username=None
+            )  
         )
         self.assertRaises(
             Exception, 
-            self.contract.create_profile,
-            username=15
+            self.contract.interact,
+            action='profile',
+            payload=dict(
+                action='create_profile',
+                username=15
+            )  
         )
         self.assertRaises(
             Exception, 
-            self.contract.create_profile,
-            username='somethingveryverylonglkasjdlkgjasdlgkjasdklgjaskdlgjasdklgjad'
+            self.contract.interact,
+            action='profile',
+            payload=dict(
+                action='create_profile',
+                username='somethingveryverylonglkasjdlkgjasdlgkjasdklgjaskdlgjasdklgjad'
+            )  
         )
 
 if __name__ == '__main__':

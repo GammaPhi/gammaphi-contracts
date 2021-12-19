@@ -21,8 +21,8 @@ owner = Variable()
 def seed():
     owner.set(ctx.caller)
     player_metadata_contract.set('con_gamma_phi_profile_v4')
-    hand_controller_contract.set('con_poker_hand_controller_v2')
-    game_controller_contract.set('con_poker_game_controller_v1')
+    hand_controller_contract.set('con_poker_hand_controller_v3')
+    game_controller_contract.set('con_poker_game_controller_v2')
 
 @export
 def update_player_metadata_contract(contract: str):
@@ -52,8 +52,6 @@ def add_chips_to_game(game_id: str, amount: float):
         player=player,
         games=games,
     )
-    assert phi_balances[player, ctx.this] >= amount, 'You have not approved enough for this amount of chips'
-    phi.transfer_from(amount, ctx.this, player)
 
 @export
 def withdraw_chips_from_game(game_id: str, amount: float):
@@ -64,10 +62,6 @@ def withdraw_chips_from_game(game_id: str, amount: float):
         amount=amount,
         player=player,
         games=games,
-    )
-    phi.transfer(
-        amount=amount,
-        to=player
     )
 
 
@@ -137,10 +131,63 @@ def leave_game(game_id: str):
     module.leave_game(
         game_id=game_id,
         player=player,
+        force=False,
+        games=games,
+        players_games=players_games
+    )
+
+
+@export
+def force_withdraw(player: str, amount: float):
+    assert ctx.caller == game_controller_contract.get(), 'Only the game controller contract can call this method.'
+    phi.transfer(
+        amount=amount,
+        to=player
+    )
+
+
+@export
+def force_transfer(player: str, amount: float):
+    assert ctx.caller == game_controller_contract.get(), 'Only the game controller contract can call this method.'
+    assert phi_balances[player, ctx.this] >= amount, 'You have not approved enough for this amount of chips'
+    phi.transfer_from(amount, ctx.this, player)
+
+
+@export
+def kick_from_game(game_id: str, player: str):
+    creator = ctx.caller
+    module = I.import_module(game_controller_contract.get())
+    module.kick_from_game(
+        game_id=game_id,
+        creator=creator,
+        player=player,
         games=games,
         players_games=players_games,
-        hands=hands,
-        hand_controller_contract=hand_controller_contract.get()
+    )
+
+
+@export
+def ban_player(game_id: str, player: str):
+    creator = ctx.caller
+    module = I.import_module(game_controller_contract.get())
+    module.ban_player(
+        game_id=game_id,
+        creator=creator,
+        player=player,
+        games=games,
+        players_games=players_games,
+    )
+
+
+@export
+def unban_player(game_id: str, player: str):
+    creator = ctx.caller
+    module = I.import_module(game_controller_contract.get())
+    module.unban_player(
+        game_id=game_id,
+        creator=creator,
+        player=player,
+        games=games,
     )
 
 
@@ -239,6 +286,20 @@ def payout_hand(hand_id: str):
         hand_id=hand_id,
         games=games,
         hands=hands,
+    )
+
+
+@export
+def leave_hand(player: str, game_id: str, hand_id: str, force: bool):
+    assert ctx.caller == game_controller_contract.get(), 'Only the game controller contract can call this method.'
+    module = I.import_module(hand_controller_contract.get())
+    module.leave_hand(
+        game_id=game_id,
+        hand_id=hand_id,
+        player=player,
+        force=force,
+        games=games,
+        hands=hands
     )
 
 

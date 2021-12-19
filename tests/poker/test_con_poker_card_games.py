@@ -13,8 +13,8 @@ module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'poker')
 external_deps_dir = os.path.dirname(module_dir)
 
 POKER_CONTRACT = 'con_poker_card_games_v3'
-GAME_CONTROLLER_CONTRACT = 'con_poker_game_controller_v1'
-HAND_CONTROLLER_CONTRACT = 'con_poker_hand_controller_v1'
+GAME_CONTROLLER_CONTRACT = 'con_poker_game_controller_v2'
+HAND_CONTROLLER_CONTRACT = 'con_poker_hand_controller_v3'
 PHI_CONTRACT = 'con_phi_lst001'
 RSA_CONTRACT = 'con_rsa_encryption'
 PROFILE_CONTRACT = 'con_gamma_phi_profile_v4'
@@ -25,6 +25,7 @@ BLIND_POKER = 1
 STUD_POKER = 2
 HOLDEM_POKER = 3
 OMAHA_POKER = 4
+DEFAULT_CHIPS = 100_000
 ME = 'me'
 OTHER_PLAYERS = [str(uuid.uuid4())[:12] for _ in range(7)]
 ALL_PLAYERS = OTHER_PLAYERS + [ME]
@@ -114,7 +115,7 @@ def setup_game(creator: str, other_players: list, **kwargs):
 
     contract.add_chips_to_game(
         game_id=game_id,
-        amount=kwargs.get('chips', {}).get(ME, 100000)
+        amount=kwargs.get('chips', {}).get(ME, DEFAULT_CHIPS)
     )
 
     for p in other_players:
@@ -125,7 +126,7 @@ def setup_game(creator: str, other_players: list, **kwargs):
         )
         contract.add_chips_to_game(
             game_id=game_id,
-            amount=kwargs.get('chips', {}).get(p, 100000)
+            amount=kwargs.get('chips', {}).get(p, DEFAULT_CHIPS)
         )
 
     return game_id
@@ -145,22 +146,28 @@ def decrypt_hand(player: str, hand_id: str):
     return rsa.decrypt(bytes.fromhex(hand), KEY_STORE[player]).decode('utf-8')
 
 
+def reveal_community_cards_for_player(player: str, index: int, hand_id: str):
+    contract = get_contract_for_signer(player, POKER_CONTRACT)
+    pad_with_salt = contract.quick_read('hands', hand_id, [player, f'player_encrypted_pad{index}'])
+    pad_with_salt = rsa.decrypt(bytes.fromhex(pad_with_salt), KEY_STORE[player]).decode('utf-8')
+
+    pad = int(pad_with_salt.split(':')[0])
+    salt = int(pad_with_salt.split(':')[1])
+    contract.reveal_otp(
+        hand_id=hand_id,
+        pad=pad,
+        salt=salt,
+        index=index
+    )
+
 def reveal_community_cards(index: int, hand_id: str):
     contract = get_contract_for_signer(ME, POKER_CONTRACT)
     players = contract.quick_read('hands', hand_id, ['active_players'])
+    folded = contract.quick_read('hands', hand_id, ['folded'])
     for player in players:
-        contract = get_contract_for_signer(player, POKER_CONTRACT)
-        pad_with_salt = contract.quick_read('hands', hand_id, [player, f'player_encrypted_pad{index}'])
-        pad_with_salt = rsa.decrypt(bytes.fromhex(pad_with_salt), KEY_STORE[player]).decode('utf-8')
-
-        pad = int(pad_with_salt.split(':')[0])
-        salt = int(pad_with_salt.split(':')[1])
-        contract.reveal_otp(
-            hand_id=hand_id,
-            pad=pad,
-            salt=salt,
-            index=index
-        )
+        if player in folded:
+            continue
+        reveal_community_cards_for_player(player, index, hand_id)
 
     contract = get_contract_for_signer(ME, POKER_CONTRACT)
     contract.reveal(
@@ -169,7 +176,6 @@ def reveal_community_cards(index: int, hand_id: str):
     )
     
     community = contract.quick_read('hands', hand_id, ['community'])
-    print(community[index-1])
     return community[index-1]
 
 
@@ -180,23 +186,33 @@ def place_bet(player: str, bet: float, hand_id: str):
         bet=bet
     )
 
+def leave_game(player: str, game_id: str):
+    contract = get_contract_for_signer(player, POKER_CONTRACT)
+    contract.leave_game(
+        game_id=game_id,
+    )
+
+
+def kick_from_game(creator: str, player: str, game_id: str):
+    contract = get_contract_for_signer(creator, POKER_CONTRACT)
+    contract.kick_from_game(
+        game_id=game_id,
+        player=player
+    )
+
+
 def verify_hands(hand_id: str):
     contract = get_contract_for_signer(ME, POKER_CONTRACT)
     players = contract.quick_read('hands', hand_id, ['active_players'])
     folded = contract.quick_read('hands', hand_id, ['folded'])
     for player in players:
         if player not in folded:
-            print(f'Player: {player}')
             hand = decrypt_hand(player, hand_id)
-            print(hand)
             contract = get_contract_for_signer(player, POKER_CONTRACT)
             contract.verify_hand(
                 hand_id=hand_id,
                 player_hand_str=hand
             )
-            rank = contract.quick_read('hands', hand_id, [player, 'rank'])
-            #hand = contract.quick_read('hands', hand_id, [player, 'hand'])
-            print(rank)
 
 setup_players(ALL_PLAYERS)
 
@@ -244,12 +260,28 @@ class MyTestCase(unittest.TestCase):
                 self.assert_chips_in_pot(player, hand_id, 2.0)
             self.assert_total_chips_in_pot(hand_id, len(ALL_PLAYERS) * 2.0)
 
+            # make sure you can't bet before this reveal
+            self.assertRaises(AssertionError,
+                place_bet,
+                ALL_PLAYERS[0],
+                1.0,
+                hand_id
+            )
+
             reveal_community_cards(1, hand_id)
 
             for player in ALL_PLAYERS:
                 place_bet(player, 1.0, hand_id)
                 self.assert_chips_in_pot(player, hand_id, 3.0)
             self.assert_total_chips_in_pot(hand_id, len(ALL_PLAYERS) * 3.0)
+
+            # make sure you can't bet before this reveal
+            self.assertRaises(AssertionError,
+                place_bet,
+                ALL_PLAYERS[0],
+                1.0,
+                hand_id
+            )
 
             reveal_community_cards(2, hand_id)
 
@@ -258,6 +290,14 @@ class MyTestCase(unittest.TestCase):
                 self.assert_chips_in_pot(player, hand_id, 4.0)
             self.assert_total_chips_in_pot(hand_id, len(ALL_PLAYERS) * 4.0)
 
+            # make sure you can't bet before this reveal
+            self.assertRaises(AssertionError,
+                place_bet,
+                ALL_PLAYERS[0],
+                1.0,
+                hand_id
+            )
+            
             reveal_community_cards(3, hand_id)
 
             for player in ALL_PLAYERS:
@@ -275,6 +315,98 @@ class MyTestCase(unittest.TestCase):
             final_total = sum([contract.quick_read('games', game_id, [p]) for p in ALL_PLAYERS])
             self.assertEqual(original_total, final_total)
 
+    def test_leave_hand(self):
+        game_id = setup_game(
+            creator=ME,
+            other_players=OTHER_PLAYERS,
+            game_type=HOLDEM_POKER,
+        )
+        contract = get_contract_for_signer(ME, POKER_CONTRACT)
+        original_total = sum([contract.quick_read('games', game_id, [p]) for p in ALL_PLAYERS])
+        left_from_game = 0
+
+        # Test leaving early
+        leave_game(OTHER_PLAYERS[1], game_id)
+        left_from_game -= DEFAULT_CHIPS
+
+        # Start a hand
+        hand_id = contract.start_hand(
+            game_id=game_id,
+        )
+
+        all_players = ALL_PLAYERS.copy()
+        all_players.remove(OTHER_PLAYERS[1])
+
+        ante_up(all_players, hand_id)
+        expected_chips = len(all_players)
+
+        for player in all_players:
+            self.assert_chips_in_pot(player, hand_id, 1.0)
+        self.assert_total_chips_in_pot(hand_id, expected_chips)
+
+        contract.deal_cards(hand_id=hand_id)
+
+        self.assertRaises(AssertionError,
+            leave_game,
+            player=OTHER_PLAYERS[0],
+            game_id=game_id
+        )
+  
+        # Needs to reveal community cards
+        self.assertRaises(AssertionError,
+            place_bet,
+            OTHER_PLAYERS[0], -1, hand_id
+        )
+
+        print(contract.quick_read('hands', hand_id, ['next_better']))
+        print(OTHER_PLAYERS[0])
+        print(contract.quick_read('hands', hand_id, ['active_players']))
+        print(all_players)
+        print(OTHER_PLAYERS)
+
+        reveal_community_cards_for_player(OTHER_PLAYERS[0], 1, hand_id)
+        reveal_community_cards_for_player(OTHER_PLAYERS[0], 2, hand_id)
+        reveal_community_cards_for_player(OTHER_PLAYERS[0], 3, hand_id)
+
+        place_bet(OTHER_PLAYERS[0], -1, hand_id)
+        leave_game(OTHER_PLAYERS[0], game_id)
+        left_from_game -= DEFAULT_CHIPS - 1
+
+        all_players.remove(OTHER_PLAYERS[0])
+
+        # TODO Should dealer be able to leave game? I think not while in play
+        self.assertRaises(AssertionError,
+            leave_game,
+            ME, game_id
+        )
+
+        reveal_community_cards_for_player(OTHER_PLAYERS[3], 1, hand_id)
+        reveal_community_cards_for_player(OTHER_PLAYERS[3], 2, hand_id)
+        reveal_community_cards_for_player(OTHER_PLAYERS[3], 3, hand_id)
+
+        # Kick from game with reveal
+        kick_from_game(ME, OTHER_PLAYERS[3], game_id)
+        all_players.remove(OTHER_PLAYERS[3])
+        left_from_game -= DEFAULT_CHIPS - 1
+
+        expected_chips += len(all_players)
+        for player in all_players:
+            place_bet(player, 1.0, hand_id)
+            self.assert_chips_in_pot(player, hand_id, 2.0)
+        self.assert_total_chips_in_pot(hand_id, expected_chips)
+
+        reveal_community_cards(1, hand_id)
+
+        # Kick from game without reveal
+        kick_from_game(ME, OTHER_PLAYERS[2], game_id)
+        all_players.remove(OTHER_PLAYERS[2])
+        left_from_game -= DEFAULT_CHIPS - 2
+
+        self.assertTrue(contract.quick_read('hands', hand_id, ['completed']))
+        self.assertTrue(contract.quick_read('hands', hand_id, ['payed_out']))
+
+        final_total = sum([contract.quick_read('games', game_id, [p]) for p in ALL_PLAYERS])
+        self.assertEqual(original_total, final_total - left_from_game)
 
     def test_community_games_going_all_in(self):
         for game_type in [HOLDEM_POKER, OMAHA_POKER]:
@@ -312,12 +444,14 @@ class MyTestCase(unittest.TestCase):
             self.assertEqual(1, len(all_in))
             self.assertEqual(ME, all_in[0])
 
+            self.assertEqual(1, contract.quick_read('hands', hand_id, ['round']))
             reveal_community_cards(1, hand_id)
 
             # Others keep betting
-            for player in OTHER_PLAYERS:
+            for player in OTHER_PLAYERS:                
                 place_bet(player, 1, hand_id)
 
+            self.assertEqual(2, contract.quick_read('hands', hand_id, ['round']))
             reveal_community_cards(2, hand_id)
 
             for i in range(len(OTHER_PLAYERS)):
@@ -335,17 +469,27 @@ class MyTestCase(unittest.TestCase):
                     # Call
                     place_bet(player, 399, hand_id)
 
-            reveal_community_cards(3, hand_id)
-
             for i in range(3):
                 # Fold
                 player = OTHER_PLAYERS[i]
+                reveal_community_cards_for_player(player, 1, hand_id)
+                reveal_community_cards_for_player(player, 2, hand_id)
+                reveal_community_cards_for_player(player, 3, hand_id)
                 place_bet(player, -1, hand_id)
 
-            print(OTHER_PLAYERS.index(contract.quick_read('hands', hand_id, ['next_better'])))
             for i in range(4, len(OTHER_PLAYERS)):
                 player = OTHER_PLAYERS[i]
                 place_bet(player, 0, hand_id)
+
+            self.assertEqual(3, contract.quick_read('hands', hand_id, ['round']))
+            reveal_community_cards(3, hand_id)
+
+            for i in range(4, len(OTHER_PLAYERS)):
+                player = OTHER_PLAYERS[i]
+                place_bet(player, 1, hand_id)
+
+            self.assertEqual(4, contract.quick_read('hands', hand_id, ['round']))
+            reveal_community_cards(3, hand_id)
 
             verify_hands(hand_id)
 
@@ -358,12 +502,12 @@ class MyTestCase(unittest.TestCase):
             self.assertEqual(original_total, final_total)
 
     def test_simple_1_card_game(self):
-        for game_type in [HOLDEM_POKER, ONE_CARD_POKER, BLIND_POKER, STUD_POKER]:
+        for game_type in [ONE_CARD_POKER, BLIND_POKER, STUD_POKER]:
             phi = get_contract_for_signer(ME, PHI_CONTRACT)
 
             if game_type == STUD_POKER:
-                n_cards_totals = [5, 5, 5, 7, 7, 7]
-                n_hole_cards = [1, 3, 5, 1, 2, 7]
+                n_cards_totals = [5, 5, 7, 7]
+                n_hole_cards = [1, 5, 3, 7]
             else:
                 n_cards_totals = [None]
                 n_hole_cards = [None]
@@ -448,7 +592,6 @@ class MyTestCase(unittest.TestCase):
                 hand_id = contract.start_hand(
                     game_id=game_id,
                 )
-                print(f'Hand: {hand_id}')
 
                 stored_hand_id = contract.quick_read('games', game_id, ['current_hand'])
                 self.assertEqual(hand_id, stored_hand_id)
@@ -510,41 +653,27 @@ class MyTestCase(unittest.TestCase):
                 for card in your_cards:
                     self.assertEqual(len(card), 2)
 
-                print(f'My hand: {my_hand}')
-                print(f'Your hand: {your_hand}')
-
                 self.assertNotEqual(tuple(my_cards), tuple(your_cards))
 
                 dealer = contract.quick_read('hands', hand_id, ['dealer'])
                 self.assertEqual(dealer, ME)
 
                 round = contract.quick_read('hands', hand_id, ['round'])
-                print(round)
 
                 # Check
-                print('bet1')
                 contract = get_contract_for_signer(OTHER_PLAYERS[0], POKER_CONTRACT)
                 contract.bet_check_or_fold(
                     hand_id=hand_id,
                     bet=0.0
                 )
-
-                round = contract.quick_read('hands', hand_id, ['round'])
-                print(round)
-
-                # Bet
-                print('bet2')
+                
                 contract = get_contract_for_signer(ME, POKER_CONTRACT)
                 contract.bet_check_or_fold(
                     hand_id=hand_id,
                     bet=10.0
                 )
 
-                round = contract.quick_read('hands', hand_id, ['round'])
-                print(round)
-
                 # Raise
-                print('bet3')
                 contract = get_contract_for_signer(OTHER_PLAYERS[0], POKER_CONTRACT)
                 contract.bet_check_or_fold(
                     hand_id=hand_id,
@@ -552,87 +681,13 @@ class MyTestCase(unittest.TestCase):
                 )
 
                 round = contract.quick_read('hands', hand_id, ['round'])
-                print(round)
 
                 # Call
-                print('bet4')
                 contract = get_contract_for_signer(ME, POKER_CONTRACT)
                 contract.bet_check_or_fold(
                     hand_id=hand_id,
                     bet=5.0
                 )
-
-                round = contract.quick_read('hands', hand_id, ['round'])
-                print(round)
-
-                # Holdem specific checks
-                if game_type == HOLDEM_POKER:
-                    community_encrypted = contract.quick_read('hands', hand_id, ['community_encrypted'])
-                    print(community_encrypted)
-                    community = []
-                    for i in range(1, 4):
-                        my_pad1 = contract.quick_read('hands', hand_id, [ME, f'player_encrypted_pad{i}'])
-                        your_pad1 = contract.quick_read('hands', hand_id, [OTHER_PLAYERS[0], f'player_encrypted_pad{i}'])
-                        my_pad1 = rsa.decrypt(bytes.fromhex(my_pad1), KEY_STORE[ME]).decode('utf-8')
-                        your_pad1 = rsa.decrypt(bytes.fromhex(your_pad1), KEY_STORE[OTHER_PLAYERS[0]]).decode('utf-8')
-                        #print(my_pad1)
-                        #print(your_pad1)
-                        mp1 = int(my_pad1.split(':')[0])
-                        yp1 = int(your_pad1.split(':')[0])
-                        ms1 = int(my_pad1.split(':')[1])
-                        ys1 = int(your_pad1.split(':')[1])
-                        otp = client.get_contract(OTP_CONTRACT)
-                        c1 = community_encrypted[i-1]
-                        _c1 = otp.decrypt_hex(
-                            encrypted_str=c1,
-                            otp=yp1,
-                            safe=False
-                        )
-                        __c1 = otp.decrypt(
-                            encrypted_str=_c1,
-                            otp=mp1,
-                            safe=False
-                        )
-                        community.append(__c1)
-                        contract = get_contract_for_signer(ME, POKER_CONTRACT)
-                        contract.reveal_otp(
-                            hand_id=hand_id,
-                            pad=mp1,
-                            salt=ms1,
-                            index=i
-                        )
-                        contract = get_contract_for_signer(OTHER_PLAYERS[0], POKER_CONTRACT)
-                        contract.reveal_otp(
-                            hand_id=hand_id,
-                            pad=yp1,
-                            salt=ys1,
-                            index=i
-                        )
-                        contract = get_contract_for_signer(ME, POKER_CONTRACT)
-                        contract.reveal(
-                            hand_id=hand_id,
-                            index=i
-                        )
-
-                        # Bet
-                        contract = get_contract_for_signer(OTHER_PLAYERS[0], POKER_CONTRACT)
-                        contract.bet_check_or_fold(
-                            hand_id=hand_id,
-                            bet=5.0
-                        )
-                        
-                        # Check
-                        contract = get_contract_for_signer(ME, POKER_CONTRACT)
-                        contract.bet_check_or_fold(
-                            hand_id=hand_id,
-                            bet=5.0
-                        )
-
-                        contract = get_contract_for_signer(ME, POKER_CONTRACT)
-                        round = contract.quick_read('hands', hand_id, ['round'])
-                        self.assertEqual(round, i+1)
-
-                    print(community)
 
                 # Verify hand publicly
                 contract = get_contract_for_signer(OTHER_PLAYERS[0], POKER_CONTRACT)
@@ -646,7 +701,6 @@ class MyTestCase(unittest.TestCase):
                     hand_id=hand_id,
                     player_hand_str=my_hand
                 )
-
 
                 # Payout hand
                 contract.payout_hand(
@@ -692,7 +746,6 @@ class MyTestCase(unittest.TestCase):
                 hand_id = contract.start_hand(
                     game_id=game_id
                 )
-                print(f'Hand: {hand_id}')
 
                 contract = get_contract_for_signer(ME, POKER_CONTRACT)
                 # Ante up
@@ -721,7 +774,6 @@ class MyTestCase(unittest.TestCase):
                 )
 
                 # Bet
-                print('bet6')
                 contract = get_contract_for_signer(ME, POKER_CONTRACT)
                 contract.bet_check_or_fold(
                     hand_id=hand_id,
@@ -729,7 +781,6 @@ class MyTestCase(unittest.TestCase):
                 )
 
                 # Raise
-                print('bet7')
                 contract = get_contract_for_signer(OTHER_PLAYERS[0], POKER_CONTRACT)
                 contract.bet_check_or_fold(
                     hand_id=hand_id,
@@ -737,7 +788,6 @@ class MyTestCase(unittest.TestCase):
                 )
 
                 # Fold
-                print('bet8')
                 contract = get_contract_for_signer(ME, POKER_CONTRACT)
                 contract.bet_check_or_fold(
                     hand_id=hand_id,
@@ -758,8 +808,6 @@ class MyTestCase(unittest.TestCase):
                 hand_id = contract.start_hand(
                     game_id=game_id
                 )
-
-                print(f'Hand: {hand_id}')
 
                 active_players = contract.quick_read('hands', hand_id, ['active_players'])
                 self.assertEqual(len(active_players), 0)
@@ -803,7 +851,6 @@ class MyTestCase(unittest.TestCase):
                 )
 
                 # Bet
-                print('bet6')
                 contract = get_contract_for_signer(ME, POKER_CONTRACT)
                 contract.bet_check_or_fold(
                     hand_id=hand_id,
@@ -811,7 +858,6 @@ class MyTestCase(unittest.TestCase):
                 )
 
                 # Raise
-                print('bet7')
                 contract = get_contract_for_signer(OTHER_PLAYERS[0], POKER_CONTRACT)
                 contract.bet_check_or_fold(
                     hand_id=hand_id,
@@ -819,7 +865,6 @@ class MyTestCase(unittest.TestCase):
                 )
 
                 # Fold
-                print('bet8')
                 contract = get_contract_for_signer(OTHER_PLAYERS[2], POKER_CONTRACT)
                 contract.bet_check_or_fold(
                     hand_id=hand_id,
