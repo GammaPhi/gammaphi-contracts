@@ -68,6 +68,7 @@ def interact(payload: dict, state: dict, caller: str):
         )
     elif function == 'force_delete_profile':
         force_delete_profile(
+            payload.get('user_address'),
             caller,
             metadata,
             usernames,
@@ -102,7 +103,7 @@ def interact(payload: dict, state: dict, caller: str):
             owner,
         )
     elif function == 'force_update_usernames':
-        force_update_metadata(
+        force_update_usernames(
             payload.get('key'),
             payload.get('value'),
             caller,
@@ -262,7 +263,7 @@ def delete_profile(caller: str, metadata: Any, usernames: Any, total_users: Any)
     delete_profile_helper(caller, metadata, usernames, total_users)
 
 
-def force_delete_profile(caller: str, user_address: str, metadata: Any, usernames: Any, total_users: Any, owner: Any):
+def force_delete_profile(user_address: str, caller: str, metadata: Any, usernames: Any, total_users: Any, owner: Any):
     assert caller == owner.get(), 'Only the owner can call force_delete_profile'
     delete_profile_helper(user_address, metadata, usernames, total_users)
 
