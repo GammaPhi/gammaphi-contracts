@@ -45,6 +45,22 @@ def register_action(action: str, contract: str):
     actions[action] = contract
 
 @export
+def override_action(action: str, contract: str):
+    assert ctx.caller == owner.get(), 'Only owner can call!'
+    assert actions[action] is not None, 'Action not already registered!'
+    # Attempt to import the contract to make sure it is already submitted
+    p = I.import_module(contract)
+
+    # Assert ownership is election_house and interface is correct
+    assert I.owner_of(p) == ctx.this, \
+        'This contract must control the action contract!'
+
+    assert I.enforce_interface(p, action_interface), \
+        'Action contract does not follow the correct interface!'
+
+    actions[action] = contract
+
+@export
 def unregister_action(action: str):
     assert ctx.caller == owner.get(), 'Only owner can call!'
     assert actions[action] is not None, 'Action does not exist!'
