@@ -1,6 +1,5 @@
 # con_gamma_phi_profile_impl_v1
 
-
 DEFAULT_METADATA_FIELDS = [
     'username',
     'display_name',

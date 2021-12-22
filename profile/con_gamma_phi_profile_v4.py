@@ -5,6 +5,7 @@ owner = Variable()
 
 metadata = Hash(default_value=None)
 usernames = Hash(default_value=None)
+channels = Hash(default_value=None)
 total_users = Variable()
 
 actions = Hash()
@@ -13,6 +14,7 @@ S = {
     'metadata': metadata,
     'usernames': usernames,
     'total_users': total_users,
+    'channels': channels,
     'owner': owner
 }
 

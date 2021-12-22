@@ -13,3 +13,5 @@ def send_message(to: str, message: Any):
     messages_hash[sender, to, counter, 'message'] = message
     messages_hash[sender, to, counter, 'timestamp'] = now    
     messages_hash[sender, to, 'counter'] = counter
+
+
