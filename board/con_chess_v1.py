@@ -1,7 +1,6 @@
 NUM_ROWS = NUM_COLS = 8
 NUM_SQUARES = NUM_ROWS * NUM_COLS
 INITIAL_BOARD = 'rnbqkbnrpppppppp                                PPPPPPPPRNBQKBNR'
-GAME_NAME = 'chess'
 
 
 # Setup vectors

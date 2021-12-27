@@ -2,7 +2,6 @@
 NUM_ROWS = NUM_COLS = 8
 NUM_SQUARES = NUM_ROWS * NUM_COLS
 INITIAL_BOARD = ' b b b bb b b b  b b b b                w w w w  w w w ww w w w '
-GAME_NAME = 'checkers'
 
 assert len(INITIAL_BOARD) == NUM_SQUARES, 'Invalid initial board.'
 
