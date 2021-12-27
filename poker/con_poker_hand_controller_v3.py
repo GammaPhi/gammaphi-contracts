@@ -48,6 +48,7 @@ def start_hand(game_id: str, dealer: str, games: Any, hands: Any) -> str:
     # Update game state
     games[game_id, 'current_hand'] = hand_id
     # Update hand state
+    hands[hand_id, 'previous_hand_id'] = previous_hand_id
     hands[hand_id, 'game_id'] = game_id
     hands[hand_id, 'dealer'] = dealer
     hands[hand_id, 'folded'] = []

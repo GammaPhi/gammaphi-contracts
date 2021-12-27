@@ -1,6 +1,7 @@
 #tests/test_contract.py
 import unittest
 import os
+import uuid
 import rsa # For generating keys only
 from contracting.client import ContractingClient
 from os.path import dirname, abspath, join
@@ -11,21 +12,30 @@ module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'profile')
 
 PROFILE_CONTRACT = 'con_gamma_phi_profile_v4'
 PROFILE_IMPL_CONTRACT = 'con_gamma_phi_profile_impl_v1'
-
+CHANNEL_IMPL_CONTRACT = 'con_gamma_phi_channel_impl_v1'
+RSA_CONTRACT = 'con_rsa_encryption'
 
 with open(os.path.join(module_dir, f'{PROFILE_CONTRACT}.py'), 'r') as f:
     code = f.read()
     client.submit(code, name=PROFILE_CONTRACT, signer='me')
 
-
 with open(os.path.join(module_dir, f'{PROFILE_IMPL_CONTRACT}.py'), 'r') as f:
     code = f.read()
     client.submit(code, name=PROFILE_IMPL_CONTRACT, owner=PROFILE_CONTRACT, signer='me')
 
+with open(os.path.join(dirname(module_dir), 'rsa', f'{RSA_CONTRACT}.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=RSA_CONTRACT)
+
+with open(os.path.join(module_dir, f'{CHANNEL_IMPL_CONTRACT}.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=CHANNEL_IMPL_CONTRACT, owner=PROFILE_CONTRACT, signer='me')
+
+
 client.signer = 'me'
 contract = client.get_contract(PROFILE_CONTRACT)
 contract.register_action(action='profile', contract=PROFILE_IMPL_CONTRACT)
-
+contract.register_action(action='channel', contract=CHANNEL_IMPL_CONTRACT)
 
 # Generate keys with rsa library
 def generate_keys():
@@ -36,6 +46,89 @@ class MyTestCase(unittest.TestCase):
     def setUp(self):
         client.signer = "you"
         self.contract = client.get_contract(PROFILE_CONTRACT)
+
+    def test_channels(self):
+        keystore = {}
+        users = [str(uuid.uuid4())[:10] for i in range(10)]
+        for user in users:
+            vk, sk = generate_keys()
+            keystore[user] = sk
+            client.signer = user
+            contract = client.get_contract(PROFILE_CONTRACT)
+            contract.interact(
+                action='profile',
+                payload=dict(
+                    action="create_profile",
+                    username=user,
+                    public_rsa_key=f'{vk.n}|{vk.e}'
+                )
+            )
+        # create a channel
+        user = users[0]
+        client.signer = user
+        contract = client.get_contract(PROFILE_CONTRACT)
+        contract.interact(
+            action='channel',
+            payload=dict(
+                action='create_channel',
+                users=users[1:4],
+                channel_name='mychannel'
+            )
+        )
+        self.assertEqual(user, contract.quick_read('channels', 'mychannel', ['owner']))
+
+        expected_key = None
+        for i in range(4):
+            # Make sure they get the encrypted keys
+            user = users[i]
+            key = contract.quick_read('metadata', user, ['keys', 'mychannel'])
+            print(f'Key for user {i}: {key}')
+            self.assertIsNotNone(key)
+            decrypted_key = rsa.decrypt(bytes.fromhex(key), keystore[user]).decode('utf-8')
+            print(f'Decrypted key: {decrypted_key}')
+            if i == 0:
+                expected_key = decrypted_key
+            else:
+                self.assertEqual(decrypted_key, expected_key)
+        for i in range(4, 10):
+            # Make sure they don't get the encrypted keys
+            user = users[i]
+            key = contract.quick_read('metadata', user, ['keys', 'mychannel'])
+            print(f'Key for user {i}: {key}')
+            self.assertIsNone(key)
+        
+        # update a channel
+        user = users[0]
+        client.signer = user
+        contract = client.get_contract(PROFILE_CONTRACT)
+        contract.interact(
+            action='channel',
+            payload=dict(
+                action='update_channel',
+                users=users[2:5],
+                channel_name='mychannel'
+            )
+        )
+        expected_key2 = None
+        for i in range(10):
+            # Make sure they get the encrypted keys
+            user = users[i]
+            key = contract.quick_read('metadata', user, ['keys', 'mychannel'])
+            print(f'Key for user {i}: {key}')
+            if i in list(range(5, 10)):
+                self.assertIsNone(key)
+            else:
+                self.assertIsNotNone(key)
+                decrypted_key = rsa.decrypt(bytes.fromhex(key), keystore[user]).decode('utf-8')
+                print(f'Decrypted key: {decrypted_key}')
+                if i == 0:
+                    expected_key2 = decrypted_key
+                    self.assertNotEqual(expected_key, expected_key2)
+                elif i == 1:
+                    self.assertEqual(decrypted_key, expected_key)
+                    self.assertNotEqual(decrypted_key, expected_key2)
+                else:
+                    self.assertEqual(expected_key2, decrypted_key)
 
     def test_create_simple_profile(self):
         n = self.contract.quick_read('total_users')

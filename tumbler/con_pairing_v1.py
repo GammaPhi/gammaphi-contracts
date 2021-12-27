@@ -393,10 +393,17 @@ def miller_loop(Q: Any, P: Any) -> Any:
     return final_exponentiate(f)
 
 # Pairing computation
+# Curve is y**2 = x**3 + 3
+b = FQ(3)
+# Twisted curve over FQ**2
+b2 = fqp_div(FQ2([3, 0]), FQ2([9, 1]))
+# Extension curve over FQ**12; same b value as over FQ
+b12 = FQ12([3] + [0] * 11)
+
 @export
 def pairing(Q: Any, P: Any) -> Any:
-    assert is_on_curve(Q, b2)
-    assert is_on_curve(P, b)
+    assert is_on_curve(Q, b2), 'Q is not on the curve.'
+    assert is_on_curve(P, b), 'P is not on the curve.'
     return miller_loop(twist(Q), cast_point_to_fq12(P))
 
 @export
