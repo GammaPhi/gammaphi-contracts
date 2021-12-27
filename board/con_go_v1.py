@@ -54,7 +54,7 @@ def get_adjacent_positions(x: int, y: int) -> list:
     ]
     return [p for p in possible if valid_coords(p[0], p[1])]
     
-    
+
 def get_connecting_positions(x: int, y: int, board: list) -> set:
     team = board[coords_to_index(x, y)]
     current = [(x, y)]
@@ -150,25 +150,5 @@ def move(caller: str, team: str, x1: int, y1: int, x2: int, y2: int, state: Any)
     state['current_player'] = opponent
     state['board'] = board
 
-    game_finished = False
-
-    if game_finished:
-        state['winner'] = team
-        wager = state.get('wager', 0)
-        is_creator = state['creator'] == caller
-        creator_wins = state.get('creator_wins', 0)
-        opponent_wins = state.get('opponent_wins', 0)
-        if is_creator:
-            creator_wins += 1
-        else:
-            opponent_wins += 1
-        state['creator_wins'] = creator_wins
-        state['opponent_wins'] = opponent_wins
-        rounds = state.get('rounds', 1)
-
-        if creator_wins > rounds // 2 or opponent_wins > rounds // 2:
-            state['completed'] = True
-            if wager > 0:
-                return 2*wager
     return 0
             
