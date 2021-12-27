@@ -3,7 +3,18 @@ NUM_ROWS = NUM_COLS = 8
 NUM_SQUARES = NUM_ROWS * NUM_COLS
 INITIAL_BOARD = '                                                                '
 
+OPPOSING = {
+    'b': 'w',
+    'w': 'b',
+}
+
+INITIAL_STATE = {
+    'current_player': 'b',
+    'board': str(INITIAL_BOARD)
+}
+
 assert len(INITIAL_BOARD) == NUM_SQUARES, 'Invalid initial board.'
+
 
 def coords_to_index(x: int, y: int) -> int:
     assert valid_coords(x, y), 'Invalid (x, y): ({}, {})'.format(x, y)
@@ -20,19 +31,9 @@ def index_to_coords(index: int) -> tuple:
 def valid_index(index: int) -> bool:
     return index >= 0 and index < NUM_SQUARES
 
+
 def valid_coords(x: int, y: int) -> bool:
     return x >= 0 and x < NUM_ROWS and y >= 0 and y < NUM_COLS
-
-
-OPPOSING = {
-    'b': 'w',
-    'w': 'b',
-}
-
-INITIAL_STATE = {
-    'current_player': 'b',
-    'board': str(INITIAL_BOARD)
-}
 
 
 @export
@@ -52,6 +53,7 @@ def get_adjacent_positions(x: int, y: int) -> list:
         (x, y + 1)
     ]
     return [p for p in possible if valid_coords(p[0], p[1])]
+    
     
 def get_connecting_positions(x: int, y: int, board: list) -> set:
     team = board[coords_to_index(x, y)]
