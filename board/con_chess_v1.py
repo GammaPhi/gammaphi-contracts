@@ -24,7 +24,9 @@ assert len(INITIAL_BOARD) == NUM_SQUARES, 'Invalid initial board.'
 
 INITIAL_STATE = {
     'current_player': 'w',
-    'board': str(INITIAL_BOARD)
+    'board': str(INITIAL_BOARD),
+    'creator_team': 'w',
+    'opponent_team': 'b',
 }
 
 
@@ -340,8 +342,17 @@ def opposing_team(team: str):
 
 
 @export
-def move(caller: str, team: str, x1: int, y1: int, x2: int, y2: int, state: Any) -> int:
-    # Assert it's the right player's piece
+def force_end_round(state: dict, metadata: dict):
+    if state.get('winner') is None:
+        state['stalemate'] = True
+
+
+@export
+def move(caller: str, team: str, payload: dict, state: dict, metadata: dict):
+    x1=payload['x1']
+    y1=payload['y1']
+    x2=payload['x2']
+    y2=payload['y2']
     board = list(state['board'])
 
     curr_index = coords_to_index(x1, y1)
@@ -561,19 +572,3 @@ def move(caller: str, team: str, x1: int, y1: int, x2: int, y2: int, state: Any)
         state['stalemate'] = True
     elif checkmate:
         state['winner'] = team
-        wager = state.get('wager', 0)
-        is_creator = state['creator'] == caller
-        creator_wins = state.get('creator_wins', 0)
-        opponent_wins = state.get('opponent_wins', 0)
-        if is_creator:
-            creator_wins += 1
-        else:
-            opponent_wins += 1
-        state['creator_wins'] = creator_wins
-        state['opponent_wins'] = opponent_wins
-        rounds = state.get('rounds', 1)
-        if creator_wins > rounds // 2 or opponent_wins > rounds // 2:
-            state['completed'] = True
-            if wager > 0:
-                return 2*wager
-    return 0

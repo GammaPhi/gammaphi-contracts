@@ -10,6 +10,11 @@ client = ContractingClient()
 
 module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'board')
 
+RUN_CHECKERS_TESTS = True
+RUN_CHESS_TESTS = True
+RUN_GO_TESTS = True
+PRINT_BOARD_STATE = False
+
 MAIN_CONTRACT = 'con_game_manager_v1'
 MAIN_CONTRACT_IMPL = 'con_game_manager_impl_v1'
 CHECKERS_CONTRACT = 'con_checkers_v1'
@@ -82,9 +87,10 @@ def move(team: str, x1: int, y1: int, x2: list = None, y2: list = None, game_typ
     game_num = contract.quick_read('metadata', game_type, ['me', 'count'])
     game_id = contract.quick_read('metadata', game_type, ['me', f'game-{game_num}'])
     state = get_state_for_game(game_id, game_type=game_type)
+    metadata = get_metadata_for_game(game_id, game_type=game_type)
     creator_team = state['creator_team']
-    creator = state['creator']  
-    opponent = state['opponent']  
+    creator = metadata['creator']  
+    opponent = metadata['opponent']  
     if team == 'w':
         if creator_team == 'b':
             client.signer = opponent
@@ -109,11 +115,16 @@ def move(team: str, x1: int, y1: int, x2: list = None, y2: list = None, game_typ
         }
     )
     state = contract.quick_read('metadata', game_type, [game_id, 'state'])
-    printFormattedBoard(state)
+    if PRINT_BOARD_STATE:
+        printFormattedBoard(state)
 
 
 def get_state_for_game(game_id: str, game_type: str='checkers') -> dict:
     return contract.quick_read('metadata', game_type, [game_id, 'state'])
+
+
+def get_metadata_for_game(game_id: str, game_type: str='checkers') -> dict:
+    return contract.quick_read('metadata', game_type, [game_id, 'metadata'])
 
 
 def play_game():
@@ -187,6 +198,9 @@ def play_go():
 class MyTestCase(unittest.TestCase):
 
     def test_simple_go(self):
+        if not RUN_GO_TESTS:
+            return
+
         client.signer = "me"
         contract = client.get_contract(MAIN_CONTRACT)
 
@@ -227,7 +241,6 @@ class MyTestCase(unittest.TestCase):
         winner = state.get('winner')
         self.assertIsNone(winner)
 
-        print(f'Game ID: {game_id}')
         # Play game
         play_go()
 
@@ -236,7 +249,18 @@ class MyTestCase(unittest.TestCase):
         contract.interact(
             action="games",
             payload={
-                "action": "end_game",
+                "action": "request_end",
+                "type": "go",
+                "game_id": game_id
+            }
+        )
+
+        client.signer = "me"
+        contract = client.get_contract(MAIN_CONTRACT)
+        contract.interact(
+            action="games",
+            payload={
+                "action": "accept_end",
                 "type": "go",
                 "game_id": game_id
             }
@@ -248,7 +272,9 @@ class MyTestCase(unittest.TestCase):
 
 
     def test_simple_chess(self):
-        return
+        if not RUN_CHESS_TESTS:
+            return
+
         client.signer = "me"
         contract = client.get_contract(MAIN_CONTRACT)
 
@@ -289,7 +315,6 @@ class MyTestCase(unittest.TestCase):
         winner = state.get('winner')
         self.assertIsNone(winner)
 
-        print(f'Game ID: {game_id}')
         # Play game
         play_chess()
 
@@ -299,7 +324,9 @@ class MyTestCase(unittest.TestCase):
 
 
     def test_simple_checkers(self):
-        return
+        if not RUN_CHECKERS_TESTS:
+            return
+
         client.signer = "me"
         contract = client.get_contract(MAIN_CONTRACT)
 
@@ -340,7 +367,6 @@ class MyTestCase(unittest.TestCase):
         winner = state.get('winner')
         self.assertIsNone(winner)
 
-        print(f'Game ID: {game_id}')
         # Play game
         play_game()
 
@@ -349,7 +375,9 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(winner, 'w')
 
     def test_betting_checkers(self):
-        return
+        if not RUN_CHECKERS_TESTS:
+            return
+
         client.signer = "you"
         contract = client.get_contract(MAIN_CONTRACT)
 
@@ -392,9 +420,7 @@ class MyTestCase(unittest.TestCase):
         winner = state.get('winner')
         self.assertIsNone(winner)
 
-        print(f'Game ID: {game_id}')
         for r in range(rounds * 2):
-            print(f"Round: {r}")
             # Play game
             play_game()
 

@@ -48,7 +48,9 @@ OPPOSING = {
 
 INITIAL_STATE = {
     'current_player': 'b',
-    'board': str(INITIAL_BOARD)
+    'board': str(INITIAL_BOARD),
+    'creator_team': 'b',
+    'opponent_team': 'w',
 }
 
 
@@ -107,8 +109,19 @@ def check_for_moves(board: str, team: str) -> bool:
 
 
 @export
-def move(caller: str, team: str, x1: int, y1: int, x2: list, y2: list, state: Any) -> int:
-    # Assert it's the right player's piece
+def force_end_round(state: dict, metadata: dict):
+    if state.get('winner') is None:
+        state['stalemate'] = True
+
+
+@export
+def move(caller: str, team: str, payload: dict, state: dict, metadata: dict):
+    
+    x1=payload['x1']
+    y1=payload['y1']
+    x2=payload['x2']
+    y2=payload['y2']
+    
     board = list(state['board'])
     curr_x = x1
     curr_y = y1
@@ -164,21 +177,4 @@ def move(caller: str, team: str, x1: int, y1: int, x2: list, y2: list, state: An
 
     if not opponent_has_jumps and not opponent_has_moves:
         state['winner'] = team
-        wager = state.get('wager', 0)
-        is_creator = state['creator'] == caller
-        creator_wins = state.get('creator_wins', 0)
-        opponent_wins = state.get('opponent_wins', 0)
-        if is_creator:
-            creator_wins += 1
-        else:
-            opponent_wins += 1
-        state['creator_wins'] = creator_wins
-        state['opponent_wins'] = opponent_wins
-        rounds = state.get('rounds', 1)
-
-        if creator_wins > rounds // 2 or opponent_wins > rounds // 2:
-            state['completed'] = True
-            if wager > 0:
-                return 2*wager
-    return 0
             
