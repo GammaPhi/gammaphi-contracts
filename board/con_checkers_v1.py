@@ -1,3 +1,4 @@
+# con_checkers_v1
 
 NUM_ROWS = NUM_COLS = 8
 NUM_SQUARES = NUM_ROWS * NUM_COLS

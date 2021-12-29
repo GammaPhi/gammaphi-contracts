@@ -1,3 +1,5 @@
+# con_game_manager_impl_v1
+# owner: con_game_manager_v1
 
 I = importlib
 
@@ -56,6 +58,7 @@ def create_game(payload: dict, caller: str, metadata: Any) -> str:
     wager = payload.get('wager', 0)
     rounds = payload.get('rounds', 1)
     game_type = payload.get('type')
+    game_name = payload.get('game_name', payload.get('name'))
 
     contract_for_game_type = CONTRACT_FOR_GAME_TYPE.get()
 
@@ -86,6 +89,8 @@ def create_game(payload: dict, caller: str, metadata: Any) -> str:
     game_metadata['creator'] = caller
     game_metadata['public'] = public
     game_metadata['rounds'] = rounds
+    if game_name is not None:
+        game_metadata['name'] = game_name
 
     if wager > 0:
         I.import_module(ctx.owner).force_deposit(
@@ -153,7 +158,20 @@ def assert_in_game(caller: str, game_metadata: dict):
     assert game_metadata['creator'] == caller or game_metadata['opponent'] == caller, 'You are not in this game.'
 
 
-def payout_game(game_state: dict, game_metadata: dict):
+def assert_both_parties_paid(game_state: dict):
+    assert 'creator_paid' in game_state and game_state['creator_paid'], 'Creator has not paid yet.'
+    assert 'opponent_paid' in game_state and game_state['opponent_paid'], 'Opponent has not paid.'
+
+
+def assert_round_not_completed(game_state: dict):
+        assert game_state.get('winner') is None and game_state.get('stalemate') is None, 'This round has already completed.'
+
+
+def assert_round_completed(game_state: dict):
+    assert game_state.get('winner') is not None or game_state.get('stalemate'), 'This round has not yet completed.'
+
+
+def handle_round_end(game_state: dict, game_metadata: dict):
     if game_state.get('stalemate'):
         return
     winner = game_state['winner']
@@ -221,16 +239,18 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
                 game_state['opponent_paid'] = True
 
         elif action == 'forfeit_round':
-            assert game_state.get('winner') is None and game_state.get('stalemate') is None, 'A winner has already been declared'
+            assert_round_not_completed(game_state)
+            assert_both_parties_paid(game_state)
             if is_creator:
                 winner = game_state['opponent_team']
             else:
                 winner = game_state['creator_team']
             game_state['winner'] = winner
-            payout_game(game_state, game_metadata)
+            handle_round_end(game_state, game_metadata)
                                          
         elif action == 'request_end':
-            assert game_state.get('winner') is None and game_state.get('stalemate') is None, 'A winner has already been declared'
+            assert_round_not_completed(game_state)
+            assert_both_parties_paid(game_state)
             assert game_state.get('creator_requested_end') is None and game_state.get('opponent_requested_end') is None, 'End request has already been submitted.'
             if is_creator:
                 game_state['creator_requested_end'] = True
@@ -238,7 +258,8 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
                 game_state['opponent_requested_end'] = True
 
         elif action == 'accept_end':
-            assert game_state.get('winner') is None and game_state.get('stalemate') is None, 'A winner has already been declared'
+            assert_round_not_completed(game_state)
+            assert_both_parties_paid(game_state)
             assert game_state.get('creator_accepted_end') is None and game_state.get('opponent_accepted_end') is None, 'End request has already been accepted.'
             if is_creator:
                 assert game_state['opponent_requested_end'], 'Opponent did not request an end to this round.'
@@ -248,7 +269,27 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
                 game_state['opponent_accepted_end'] = True
             contract = I.import_module(contract_for_game_type[game_type])
             contract.force_end_round(game_state, game_metadata)
-            payout_game(game_state, game_metadata)
+            handle_round_end(game_state, game_metadata)
+
+        elif action == 'early_end':
+            if is_creator:
+                # Assert creator paid and opponent did not
+                assert 'creator_paid' in game_state and game_state['creator_paid'], 'You did not pay yet.'
+                assert 'opponent_paid' not in game_state or not game_state['opponent_paid'], 'Opponent has already paid.'
+                del game_state['creator_paid']
+            else:
+                assert 'opponent_paid' in game_state and game_state['opponent_paid'], 'You did not pay yet.'
+                assert 'creator_paid' not in game_state or not game_state['creator_paid'], 'Opponent has already paid.'
+                del game_state['opponent_paid']
+
+            contract = I.import_module(contract_for_game_type[game_type])
+            contract.force_end_round(game_state, game_metadata)
+            wager = game_state.get('wager', 0)
+            if wager > 0:
+                I.import_module(ctx.owner).force_withdraw(
+                    player=caller,
+                    amount=wager
+                )   
 
         elif action == 'enforce_time_limit':
             # TODO implement this guy
@@ -296,8 +337,9 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
             if public:
                 add_game_for_user(caller, game_type, game_id, metadata)
             set_game_metadata(metadata, game_type, game_id, game_metadata)
+
         elif action == 'move':
-            assert game_state.get('winner') is None and game_state.get('stalemate') is None, 'This round has completed.'
+            assert_round_not_completed(game_state)
             if is_creator:
                 team = game_state['creator_team']
                 assert game_state['creator_paid'], 'You have not paid yet.'
@@ -312,7 +354,8 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
                 metadata=game_metadata,
             )
             if game_state.get('winner') is not None:
-                payout_game(game_state, game_metadata)
+                assert_both_parties_paid(game_state)                
+                handle_round_end(game_state, game_metadata)
 
         else:
             assert False, f'Unknown action: {action}.'

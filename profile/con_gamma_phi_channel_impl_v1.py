@@ -1,3 +1,6 @@
+# con_gamma_phi_channel_impl_v1
+# owner: con_gamma_phi_profile_v5
+
 import con_rsa_encryption as rsa
 
 random.seed()

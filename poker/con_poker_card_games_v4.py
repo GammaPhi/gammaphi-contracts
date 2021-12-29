@@ -1,4 +1,4 @@
-# con_poker_card_games_v3
+# con_poker_card_games_v4
 import con_phi_lst001 as phi
 I = importlib
 
@@ -20,7 +20,7 @@ owner = Variable()
 @construct
 def seed():
     owner.set(ctx.caller)
-    player_metadata_contract.set('con_gamma_phi_profile_v4')
+    player_metadata_contract.set('con_gamma_phi_profile_v5')
     hand_controller_contract.set('con_poker_hand_controller_v3')
     game_controller_contract.set('con_poker_game_controller_v2')
 
@@ -32,13 +32,13 @@ def update_player_metadata_contract(contract: str):
 
 @export
 def update_hand_controller_contract(contract: str):
-    assert ctx.caller == owner.get(), 'Only the owner can call update_player_metadata_contract()'
+    assert ctx.caller == owner.get(), 'Only the owner can call update_hand_controller_contract()'
     hand_controller_contract.set(contract)
 
 
 @export
 def update_game_controller_contract(contract: str):
-    assert ctx.caller == owner.get(), 'Only the owner can call update_player_metadata_contract()'
+    assert ctx.caller == owner.get(), 'Only the owner can call update_game_controller_contract()'
     game_controller_contract.set(contract)
 
 
