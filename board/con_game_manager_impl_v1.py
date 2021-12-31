@@ -4,6 +4,7 @@
 I = importlib
 
 CONTRACT_FOR_GAME_TYPE = Variable()
+TIME_LIMIT_DAYS = 2
 
 
 @construct
@@ -26,6 +27,8 @@ def reset_game_state(state: dict, initial_state: dict):
     # Swap teams
     state['creator_team'] = opponent_team
     state['opponent_team'] = creator_team
+    state['round_start'] = now
+
 
 
 def play_again(state: dict, initial_state: dict):
@@ -100,6 +103,7 @@ def create_game(payload: dict, caller: str, metadata: Any) -> str:
         game_metadata['wager'] = wager
 
     game_state['creator_paid'] = True
+    game_state['round_start'] = now
 
     add_game_for_user(caller, game_type, game_id, metadata)
 
@@ -164,7 +168,7 @@ def assert_both_parties_paid(game_state: dict):
 
 
 def assert_round_not_completed(game_state: dict):
-        assert game_state.get('winner') is None and game_state.get('stalemate') is None, 'This round has already completed.'
+    assert game_state.get('completed') is None and game_state.get('winner') is None and game_state.get('stalemate') is None, 'This round has already completed.'
 
 
 def assert_round_completed(game_state: dict):
@@ -198,7 +202,7 @@ def handle_round_end(game_state: dict, game_metadata: dict):
                 I.import_module(ctx.owner).force_withdraw(
                     player=winner_address,
                     amount=amount_to_pay
-                )   
+                )
 
 @export
 def interact(payload: dict, state: dict, caller: str) -> Any:
@@ -218,6 +222,7 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
         game_metadata = get_game_metadata(metadata, game_type, game_id)
         is_creator = game_metadata['creator'] == caller
         contract_for_game_type = CONTRACT_FOR_GAME_TYPE.get()
+        wager = game_metadata.get('wager', 0)
 
         if action != 'join':
             assert_in_game(caller, game_metadata)
@@ -225,7 +230,6 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
         assert game_type in contract_for_game_type, 'Invalid game type.'
 
         if action == 'pay_up':
-            wager = game_metadata.get('wager', 0)
             assert wager > 0, 'No need to pay up.'
             I.import_module(ctx.owner).force_deposit(
                 amount=wager,
@@ -269,6 +273,7 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
                 game_state['opponent_accepted_end'] = True
             contract = I.import_module(contract_for_game_type[game_type])
             contract.force_end_round(game_state, game_metadata)
+            game_state['completed'] = True
             handle_round_end(game_state, game_metadata)
 
         elif action == 'early_end':
@@ -284,7 +289,7 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
 
             contract = I.import_module(contract_for_game_type[game_type])
             contract.force_end_round(game_state, game_metadata)
-            wager = game_state.get('wager', 0)
+            game_state['completed'] = True
             if wager > 0:
                 I.import_module(ctx.owner).force_withdraw(
                     player=caller,
@@ -293,7 +298,40 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
 
         elif action == 'enforce_time_limit':
             # TODO implement this guy
-            pass
+            assert_round_not_completed(game_state)
+            
+            round_start = game_state.get('round_start')
+            assert round_start is not None, 'No round has been started.'
+            current_player = game_state['current_player']
+
+            if is_creator:
+                assert current_player != game_state['creator_team'], 'Cannot enforce time limit on your own turn.'
+                last_played_key = 'opponent_played_at'
+            else:
+                assert current_player == game_state['creator_team'], 'Cannot enforce time limit on your own turn.'
+                last_played_key = 'creator_played_at'
+
+            last_relevant_time = max([
+                game_state.get('opponent_played_at', round_start),
+                game_state.get('creator_played_at', round_start),
+            ])
+            unlockable_at = last_relevant_time + datetime.timedelta(days=TIME_LIMIT_DAYS)
+            assert now > unlockable_at, f'You must wait {TIME_LIMIT_DAYS} days to enforce the time limit.'
+            contract = I.import_module(contract_for_game_type[game_type])
+            contract.force_end_round(game_state, game_metadata)
+            game_state['completed'] = True
+            payout = 0.0
+            if 'creator_paid' in game_state and game_state['creator_paid']:
+                del game_state['creator_paid']
+                payout += wager
+            if 'opponent_paid' in game_state and game_state['opponent_paid']:
+                del game_state['opponent_paid']
+                payout += wager
+            if payout > 0:
+                I.import_module(ctx.owner).force_withdraw(
+                    player=caller,
+                    amount=payout
+                )               
 
         elif action == 'next_round':
             store_historical_state(game_state, game_type, game_id, metadata)
@@ -304,7 +342,6 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
             store_historical_state(game_state, game_type, game_id, metadata)
             initial_state = I.import_module(contract_for_game_type[game_type]).get_initial_state()
             play_again(game_state, initial_state)
-            wager = game_metadata.get('wager', 0)
             if wager > 0:
                 I.import_module(ctx.owner).force_deposit(
                     amount=wager,
@@ -327,7 +364,6 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
                 assert opponent == caller, 'You were not invited.'               
             assert caller != game_metadata['creator'], 'You are the creator of this game.'
             game_metadata['opponent'] = caller
-            wager = game_metadata.get('wager', 0)
             if wager > 0:
                 I.import_module(ctx.owner).force_deposit(
                     amount=wager,
@@ -343,9 +379,11 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
             if is_creator:
                 team = game_state['creator_team']
                 assert game_state['creator_paid'], 'You have not paid yet.'
+                last_played_key = 'creator_played_at'
             else:
                 team = game_state['opponent_team']
                 assert game_state.get('opponent_paid'), 'You have not paid yet.'
+                last_played_key = 'opponent_played_at'
             I.import_module(contract_for_game_type[game_type]).move(
                 caller=caller,
                 team=team,
@@ -353,6 +391,7 @@ def interact(payload: dict, state: dict, caller: str) -> Any:
                 state=game_state,
                 metadata=game_metadata,
             )
+            game_state[last_played_key] = now
             if game_state.get('winner') is not None:
                 assert_both_parties_paid(game_state)                
                 handle_round_end(game_state, game_metadata)

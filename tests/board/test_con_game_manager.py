@@ -1,10 +1,13 @@
 #tests/test_contract.py
+from datetime import datetime, timedelta
 import unittest
 import os
 import uuid
+import json
 import rsa # For generating keys only
 from contracting.client import ContractingClient
 from os.path import dirname, abspath, join
+from contracting.stdlib.bridge.time import Datetime
 
 client = ContractingClient()
 
@@ -195,7 +198,82 @@ def play_go():
     move("b", 7, 5, game_type="go")
 
 
+def to_datetime(d: datetime) -> Datetime:
+    return Datetime(d.year, d.month, d.day, hour=d.hour, minute=cnt)
+
+
+cnt = 1
+
 class MyTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        global cnt
+        cnt += 1
+        d = datetime.today()
+        d = Datetime(d.year, d.month, d.day, hour=d.hour, minute=cnt)
+        client.environment.update({
+            'now': d
+        })
+        contract = client.get_contract(MAIN_CONTRACT)
+        contract.environment.update({
+            'now': d
+        })
+
+        
+    def test_enforce_time_limit(self):
+        client.signer = "me"
+        contract = client.get_contract(MAIN_CONTRACT)
+
+        game_id = contract.interact(
+            action="games",
+            payload={
+                "action": "create",
+                "type": "go",
+                "other_player": "you",                
+            }
+        )
+
+        client.signer = "you"
+        contract = client.get_contract(MAIN_CONTRACT)
+        contract.interact(
+            action="games",
+            payload={
+                "action": "join",
+                "type": "go",
+                "game_id": game_id
+            }
+        )
+
+        move("b", 1, 1, game_type="go")
+
+        client.signer = "me"
+        contract = client.get_contract(MAIN_CONTRACT)
+        self.assertRaises(AssertionError,
+            contract.interact,
+            action="games",
+            payload={
+                "action": "enforce_time_limit",
+                "type": "go",
+                "game_id": game_id
+            },
+        )
+
+        # Now choose date in future
+        d = datetime.today() + timedelta(days=3)
+        d = Datetime(d.year, d.month, d.day, hour=d.hour, minute=d.minute)
+        client.signer = "me"
+        contract = client.get_contract(MAIN_CONTRACT)
+        contract.interact(
+            action="games",
+            payload={
+                "action": "enforce_time_limit",
+                "type": "go",
+                "game_id": game_id
+            },
+            environment={
+                'now': d
+            }
+        )
+
 
     def test_simple_go(self):
         if not RUN_GO_TESTS:
@@ -204,8 +282,8 @@ class MyTestCase(unittest.TestCase):
         client.signer = "me"
         contract = client.get_contract(MAIN_CONTRACT)
 
-        num_games_me = contract.quick_read('metadata', 'chess', ['go', 'count']) or 0
-        num_games_you = contract.quick_read('metadata', 'chess', ['go', 'count']) or 0
+        num_games_me = contract.quick_read('metadata', 'go', ['me', 'count']) or 0
+        num_games_you = contract.quick_read('metadata', 'go', ['you', 'count']) or 0
 
         game_id = contract.interact(
             action="games",
