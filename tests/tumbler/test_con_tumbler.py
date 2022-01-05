@@ -216,6 +216,23 @@ class MyTestCase(unittest.TestCase):
         my_balance_after_after = phi.quick_read('balances', 'me')
         self.assertEqual(my_balance_after, my_balance_after_after)
 
+        # Make sure cannot double withdraw
+        self.assertRaises(
+            AssertionError,
+            contract.withdraw,
+            a=a,
+            b=b,
+            c=c,
+            root=inputs[0],
+            nullifier_hash=inputs[1],
+            recipient=inputs[2],
+            relayer=inputs[3],
+            fee=inputs[4],
+            refund=inputs[5]
+        )
+        recipient_balance_after = phi.quick_read('balances', recipient)
+        self.assertEqual(recipient_balance_after, denomination)
+
 
 if __name__ == '__main__':
     unittest.main()
