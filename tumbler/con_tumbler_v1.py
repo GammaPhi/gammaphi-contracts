@@ -302,8 +302,8 @@ def double(pt: Any) -> Any:
         newx = fqp_mul(H, fqp_mul(S, 2))
         newy = fqp_sub(fqp_mul(W, fqp_sub(fqp_mul(B, 4), H)), fqp_mul(y, fqp_mul(y, fqp_mul(S_squared, 8))))
         newz = fqp_mul(S_squared, fqp_mul(S, 8))
-    return normalize1((newx, newy, newz))
-
+    #return normalize1((newx, newy, newz))
+    return (newx, newy, newz)
 
 # Elliptic curve addition
 @export
@@ -522,11 +522,11 @@ def miller_loop(Q: Any, P: Any) -> Any:
             f_num = fqp_mul(f_num, n)
             f_den = fqp_mul(f_den, d)
             R = add(R, nQ)
-    assert R == multiply(Q, ate_loop_count)
+    #assert R == multiply(Q, ate_loop_count)
     Q1 = (fqp_pow(Q[0], field_modulus), fqp_pow(Q[1], field_modulus), fqp_pow(Q[2], field_modulus))
-    assert is_on_curve(Q1, b12)
+    #assert is_on_curve(Q1, b12)
     nQ2 = (fqp_pow(Q1[0], field_modulus), fqp_pow(fqp_neg(Q1[1]), field_modulus), fqp_pow(Q1[2], field_modulus))
-    assert is_on_curve(nQ2, b12)
+    #assert is_on_curve(nQ2, b12)
     n1, d1 = linefunc(R, Q1, P)
     R = add(R, Q1)
     n2, d2 = linefunc(R, nQ2, P)
@@ -545,8 +545,8 @@ b12 = FQ12([3] + [0] * 11)
 
 @export
 def pairing(Q: Any, P: Any, final_exp: bool = True) -> Any:
-    assert is_on_curve(P, b), f'P is not on the curve. \n{P}'
-    assert is_on_curve(Q, b2), f'Q is not on the curve. \n{Q}'
+    assert is_on_curve(P, b), f'P is not on the curve.'
+    assert is_on_curve(Q, b2), f'Q is not on the curve.'
     if fq_eq(P[-1], fq_zero()) or fqp_eq(Q[-1], fq2_zero()):
         return fq12_one()
     r = miller_loop(twist(Q), cast_point_to_fq12(P))

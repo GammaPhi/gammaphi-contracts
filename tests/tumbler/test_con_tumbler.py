@@ -135,6 +135,7 @@ class MyTestCase(unittest.TestCase):
 
         contract = get_contract_for_signer(MERKE_TREE_CONTRACT, 'you')
         
+        # Invalid commitment
         self.assertRaises(
             AssertionError,
             contract.withdraw,
@@ -157,6 +158,32 @@ class MyTestCase(unittest.TestCase):
             refund=to_base10_str('0')
         )
 
+        # Invalid proof
+        self.assertRaises(
+            AssertionError,
+            contract.withdraw,
+            a=[ '18288273192161579501559134970696155822958421006432149721281330353407118730128',
+                        '17353588396131661126245745982587261375827295667438780513735339175642821258321',
+                        '1',
+                        ],
+            b=[ [ '12125316320847185546562695625645182892500099839848079025080535996695216683118',
+                        '4993025356303449615749918267052219918572354519587843071166840459213139693209' ],
+                        [ '14158536489823746118403555147857164326362615910067794436256423605048234858053',
+                        '8518835161344602633167560617564286697934143463831387733625072298536149883128' ],
+                        ['0', '1']
+                        ],
+            c=[ '14388363169789310207600157865851192764635251728868908908016597348886727301005',
+                        '7219883015026041181003762589573104239981463267036641872486652648210704250574',
+                        '1'],
+            root='19472974227534089877661842339747066589074924514634613071633204486088526229164',
+            nullifier_hash=to_base10_str('2803dbac4530cf1c3d16a948a3122e1b1288bf56291848a9e433ad46771f50a1'),
+            recipient=to_base10_str('1e240'),
+            relayer=to_base10_str('0'),
+            fee=to_base10_str('0'),
+            refund=to_base10_str('0')
+        )
+
+        # Correct proof
         proof_data = { 'pi_a':
         [ '13774734694806893345431794156356514571363079254825067879443184821206447822750',
             '5209428786776521202856824112990553528771784326411286192918798384107382954954',
@@ -192,21 +219,18 @@ class MyTestCase(unittest.TestCase):
         self.assertIsNone(recipient_balance)
 
         t0 = time.time()
-        try:
-            contract.withdraw(
-                a=a,
-                b=b,
-                c=c,
-                root=inputs[0],
-                nullifier_hash=inputs[1],
-                recipient=inputs[2],
-                relayer=inputs[3],
-                fee=inputs[4],
-                refund=inputs[5]
-            )
-            print(f'Time to withdraw PHI: {time.time()-t0}')
-        except Exception as e:
-            assert False, f'{e}'
+        contract.withdraw(
+            a=a,
+            b=b,
+            c=c,
+            root=inputs[0],
+            nullifier_hash=inputs[1],
+            recipient=inputs[2],
+            relayer=inputs[3],
+            fee=inputs[4],
+            refund=inputs[5]
+        )
+        print(f'Time to withdraw PHI: {time.time()-t0}')
 
         # Check recipient's balance
         recipient_balance_after = phi.quick_read('balances', recipient)
