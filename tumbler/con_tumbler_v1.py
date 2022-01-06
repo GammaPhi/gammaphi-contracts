@@ -112,46 +112,45 @@ def poly_rounded_div(a: list, b: list) -> list:
     return o[:deg(o)+1]
 
 
-
 @export
-def FQP(coeffs: list, modulus_coeffs: list) -> dict:
-    assert len(coeffs) == len(modulus_coeffs)
-    coeffs = [FQ(c) for c in coeffs]
-    # The degree of the extension field
-    degree = len(modulus_coeffs)
-    return {
-        'coeffs': coeffs,
-        'modulus_coeffs': modulus_coeffs,
-        'degree': degree
-    }
-
+def FQP(coeffs: list) -> list:
+    return [FQ(c) for c in coeffs]
 
 
 @export
-def fqp_add(self: dict, other: dict) -> dict:
+def fqp_add(self: list, other: list) -> list:
     assert isinstance(other, (dict, list))
-    other_coeffs = other if isinstance(other, list) else other['coeffs']
-    return FQP([fq_add(x, y) for x,y in zip(self['coeffs'], other_coeffs)], self['modulus_coeffs'])
+    other_coeffs = other
+    return FQP([fq_add(x, y) for x,y in zip(self, other_coeffs)])
 
 
 @export
-def fqp_sub(self: dict, other: dict) -> dict:
-    assert isinstance(other, (dict, list))
-    other_coeffs = other if isinstance(other, list) else other['coeffs']
-    return FQP([fq_sub(x, y) for x,y in zip(self['coeffs'], other_coeffs)], self['modulus_coeffs'])
+def fqp_sub(self: list, other: list) -> list:
+    assert isinstance(other, list)
+    other_coeffs = other
+    return FQP([fq_sub(x, y) for x,y in zip(self, other_coeffs)])
+
+
+def modulus_coeffs_for_degree(degree: int):
+    if degree == 2:
+        return [1, 0]
+    elif degree == 12:
+        return FQ12_modulus_coeffs
+    else:
+        assert False, f'Attempting to get modulus coeffs for degree {degree}'
 
 
 @export
-def fqp_mul(self: dict, other: Any) -> dict:
+def fqp_mul(self: list, other: Any) -> list:
     assert not isinstance(self, int), f'Called fqp_mul with an integer: {self}'
     if isinstance(other, int):
-        return FQP([fq_mul(c, other) for c in self['coeffs']], self['modulus_coeffs'])
+        return FQP([fq_mul(c, other) for c in self])
     else:
-        assert isinstance(other, dict)
-        degree = self['degree']
-        coeffs = self['coeffs']
-        modulus_coeffs = self['modulus_coeffs']
-        other_coeffs = other['coeffs']
+        assert isinstance(other, list)
+        degree = len(self)
+        coeffs = self
+        modulus_coeffs = modulus_coeffs_for_degree(degree)
+        other_coeffs = other
         b = [FQ(0) for i in range(degree * 2 - 1)]
         for i in range(degree):
             for j in range(degree):
@@ -160,24 +159,23 @@ def fqp_mul(self: dict, other: Any) -> dict:
             exp, top = len(b) - degree - 1, b.pop()
             for i in range(degree):
                 b[exp + i] = fq_sub(b[exp + i], fq_mul(top, FQ(modulus_coeffs[i])))
-        return FQP(b, modulus_coeffs)
+        return FQP(b)
 
 
 @export
-def fqp_div(self: dict, other: Any) -> dict:
+def fqp_div(self: list, other: Any) -> dict:
     if isinstance(other, int):
-        return FQP([fq_div(c, other) for c in self['coeffs']], self['modulus_coeffs'])
+        return FQP([fq_div(c, other) for c in self])
     else:
-        assert isinstance(other, dict)
+        assert isinstance(other, list)
         return fqp_mul(self, fqp_inv(other))
 
 
 @export
-def fqp_pow(self: dict, other: int) -> dict:
+def fqp_pow(self: list, other: int) -> list:
     #print(f'Calling fq_pow with: {self}, {other}')
-    degree = self['degree']
-    modulus_coeffs = self['modulus_coeffs']
-    o = FQP([1] + [0] * (degree - 1), modulus_coeffs)
+    degree = len(self)
+    o = FQP([1] + [0] * (degree - 1))
     t = self
     while other > 0:
         if other & 1:
@@ -190,9 +188,9 @@ def fqp_pow(self: dict, other: int) -> dict:
 # Extended euclidean algorithm used to find the modular inverse
 @export
 def fqp_inv(self: dict) -> dict:
-    degree = self['degree']
-    modulus_coeffs = self['modulus_coeffs']
-    coeffs = self['coeffs']
+    degree = len(self)
+    modulus_coeffs = modulus_coeffs_for_degree(degree)
+    coeffs = self
     lm, hm = [1] + [0] * degree, [0] * (degree + 1)
     low, high = coeffs + [0], modulus_coeffs + [1]
     while deg(low):
@@ -206,14 +204,14 @@ def fqp_inv(self: dict) -> dict:
                 nm[i+j] = fq_sub(nm[i+j], fq_mul(lm[i], r[j]))
                 new[i+j] = fq_sub(new[i+j], fq_mul(low[i], r[j]))
         lm, low, hm, high = nm, new, lm, low
-    return fqp_div(FQP(lm[:degree], modulus_coeffs), low[0])
+    return fqp_div(FQP(lm[:degree]), low[0])
 
 
 @export
-def fqp_eq(self: dict, other: dict) -> bool:
-    assert isinstance(other, dict)
-    coeffs = self['coeffs']
-    other_coeffs = other['coeffs']
+def fqp_eq(self: list, other: list) -> bool:
+    assert isinstance(other, list)
+    coeffs = self
+    other_coeffs = other
     for c1, c2 in zip(coeffs, other_coeffs):
         if fq_ne(c1, c2):
             return False
@@ -221,27 +219,26 @@ def fqp_eq(self: dict, other: dict) -> bool:
 
 
 @export
-def fqp_ne(self: dict, other: dict) -> bool:
+def fqp_ne(self: list, other: list) -> bool:
     return not fqp_eq(self, other)
 
 
 @export
-def fqp_neg(self: dict) -> dict:
-    modulus_coeffs = self['modulus_coeffs']
-    coeffs = self['coeffs']
-    return FQP([-c for c in coeffs], modulus_coeffs)
+def fqp_neg(self: list) -> dict:
+    coeffs = self
+    return FQP([-c for c in coeffs])
 
 # The quadratic extension field
 @export
 def FQ2(coeffs: list) -> dict:
     assert len(coeffs) == 2, f'FQ2 must have 2 coefficients but had {len(coeffs)}'
-    return FQP(coeffs, [1, 0])
+    return FQP(coeffs)
 
 # The 12th-degree extension field
 @export
 def FQ12(coeffs: list) -> dict:
     assert len(coeffs) == 12
-    return FQP(coeffs, FQ12_modulus_coeffs)
+    return FQP(coeffs)
 
 @export
 def fq2_one(n: int = 0) -> dict:
@@ -266,7 +263,7 @@ def is_inf(pt: Any) -> bool:
     if isinstance(x, int):
         return fq_eq(z, 0)
     else:
-        zero = FQP([0] * z['degree'], modulus_coeffs=z['modulus_coeffs'])
+        zero = FQP([0] * len(z))
         return fqp_eq(z, zero)
 
 
@@ -337,10 +334,9 @@ def add(p1: Any, p2: Any) -> Any:
         newy = fq_sub(fq_mul(U, fq_sub(V_squared_times_V2, A)), fq_mul(V_cubed, U2))
         newz = fq_mul(V_cubed, W)
     else:
-        degree = x1['degree']
-        modulus_coeffs = x1['modulus_coeffs']
-        one = FQP([1] + [0] * (degree-1), modulus_coeffs)
-        zero = FQP([0] * degree, modulus_coeffs)
+        degree = len(x1)        
+        one = FQP([1] + [0] * (degree-1))
+        zero = FQP([0] * degree)
         if fqp_eq(p1[2], zero) or fqp_eq(p2[2], zero):
             return p1 if fqp_eq(p2[2], zero) else p2
         U1 = fqp_mul(y2, z1)
@@ -372,10 +368,9 @@ def multiply(pt: Any, n: Any) -> Any:
         one = 1
         zero = 0
     else:
-        degree = x1['degree']
-        modulus_coeffs = x1['modulus_coeffs']
-        one = FQP([1] + [0] * (degree-1), modulus_coeffs)
-        zero = FQP([0] * degree, modulus_coeffs)
+        degree = len(x1)
+        one = FQP([1] + [0] * (degree-1))
+        zero = FQP([0] * degree)
     if n == 0:
         return (one, one, zero)
     elif n == 1:
@@ -426,9 +421,8 @@ def normalize1(pt: Any) -> Any:
     if isinstance(x, int):
         one = 1
     else:
-        degree = x['degree']
-        modulus_coeffs = x['modulus_coeffs']
-        one = FQP([1] + [0] * (degree-1), modulus_coeffs)
+        degree = len(x)
+        one = FQP([1] + [0] * (degree-1))
     return (x, y, one)
 
 @export
@@ -437,9 +431,9 @@ def twist(pt: Any) -> Any:
         return None
     x, y, z = tuple(pt)
     # Field isomorphism from Z[p] / x**2 to Z[p] / x**2 - 18*x + 82
-    xcoeffs = [fq_sub(x['coeffs'][0], fq_mul(x['coeffs'][1], 9)), x['coeffs'][1]]
-    ycoeffs = [fq_sub(y['coeffs'][0], fq_mul(y['coeffs'][1], 9)), y['coeffs'][1]]
-    zcoeffs = [fq_sub(z['coeffs'][0], fq_mul(z['coeffs'][1], 9)), z['coeffs'][1]]
+    xcoeffs = [fq_sub(x[0], fq_mul(x[1], 9)), x[1]]
+    ycoeffs = [fq_sub(y[0], fq_mul(y[1], 9)), y[1]]
+    zcoeffs = [fq_sub(z[0], fq_mul(z[1], 9)), z[1]]
     # Isomorphism into subfield of Z[p] / w**12 - 18 * w**6 + 82,
     # where w**6 = x
     nx = FQ12([xcoeffs[0]] + [0] * 5 + [xcoeffs[1]] + [0] * 5)
@@ -484,9 +478,8 @@ def linefunc(P1: Any, P2: Any, T: Any) -> Any:
         else:
             return fq_sub(fq_mul(xt, z1), fq_mul(x1, zt)), fq_mul(z1, zt)
     else:
-        degree = x1['degree']
-        modulus_coeffs = x1['modulus_coeffs']
-        zero = FQP([0] * degree, modulus_coeffs)
+        degree = len(x1)
+        zero = FQP([0] * degree)
         m_numerator = fqp_sub(fqp_mul(y2, z1), fqp_mul(y1, z2))
         m_denominator = fqp_sub(fqp_mul(x2, z1), fqp_mul(x1, z2))
         if fqp_ne(m_denominator, zero):
@@ -565,6 +558,7 @@ def pairing(Q: Any, P: Any, final_exp: bool = True) -> Any:
 @export
 def final_exponentiate(p: Any) -> Any:
     return fqp_pow(p, ((field_modulus ** 12 - 1) // curve_order))
+
 
 # con_mimc_sponge_v1
 
@@ -1024,11 +1018,6 @@ def verify(
         vk['gamma2'],
         vk['delta2']
     ]
-
-    # Testing
-    #p1 = [neg(G1), G1, ]
-    #p2 = [G2, G2]
-    
     x = fq12_one()
     for i in range(len(p1)):
         if is_inf(p2[i]) or is_inf(p1[i]):
