@@ -118,8 +118,7 @@ class MyTestCase(unittest.TestCase):
 
         t0 = time.time()
         contract.deposit(
-            commitment=str(int('0x1950ebe4d7216447872e8ede2bb68231db6efb3d7a7095fec917ea845817374f', 16)), 
-            encrypted_note="something"
+            commitment=str(int('0x1950ebe4d7216447872e8ede2bb68231db6efb3d7a7095fec917ea845817374f', 16)) 
         )
         print(f'Time to deposit PHI: {time.time()-t0}')
 

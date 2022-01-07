@@ -14,10 +14,10 @@ pseudo_binary_encoding = [0, 0, 0, 1, 0, 1, 0, -1, 0, 0, 1, -1, 0, 0, 1, 0,
                           1, 0, 0, -1, 0, 0, 0, 1, 1, 0, -1, 0, 0, 1, 0, 1, 1]
 curve_order = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
+
 # Extended euclidean algorithm to find modular inverses for
 # integers
 
-@export
 def inv(a: int, n: int) -> int:
     if a == 0:
         return 0
@@ -30,35 +30,34 @@ def inv(a: int, n: int) -> int:
     return lm % n
 
 
-@export
+
 def FQ(n: int) -> int:
     return n % field_modulus
 
 
-@export
+
 def fq_add(self: int, other: int) -> int:
     return (self + other) % field_modulus
 
 
-@export
+
 def fq_mul(self: int, other: int) -> int:
     return (self * other) % field_modulus
 
 
-@export
+
 def fq_sub(self: int, other: int) -> int:
     return (self - other) % field_modulus
 
 
-@export
+
 def fq_div(self: int, other: int) -> int:
     assert isinstance(other, int), 'Invalid other. Should be an int.'
     return fq_mul(self, inv(other, field_modulus)) % field_modulus
 
 
-@export
+
 def fq_pow(self: int, other: int) -> int:
-    #print(f'Calling fq_pow with: {self}, {other}')
     if other == 0:
         return 1
     elif other == 1:
@@ -68,38 +67,38 @@ def fq_pow(self: int, other: int) -> int:
     else:
         return fq_mul(fq_pow(fq_mul(self, self), other // 2), self)
 
-@export
+
 def fq_eq(self: int, other: int) -> bool:
     return self == other
 
 
-@export
+
 def fq_ne(self: int, other: int) -> int:
     return not fq_eq(self, other)
 
 
-@export
+
 def fq_neg(self: int) -> int:
     return -self
 
 
-@export
+
 def fq_one(n: int = None) -> int:
     return FQ(1)
 
-@export
+
 def fq_zero(n: int = None) -> int:
     return FQ(0)
 
 # Utility methods for polynomial math
-@export
+
 def deg(p: list) -> int:
     d = len(p) - 1
     while p[d] == 0 and d:
         d -= 1
     return d
 
-@export
+
 def poly_rounded_div(a: list, b: list) -> list:
     dega = deg(a)
     degb = deg(b)
@@ -112,23 +111,16 @@ def poly_rounded_div(a: list, b: list) -> list:
     return o[:deg(o)+1]
 
 
-@export
-def FQP(coeffs: list) -> list:
-    return [FQ(c) for c in coeffs]
-
-
-@export
 def fqp_add(self: list, other: list) -> list:
-    assert isinstance(other, (dict, list))
+    assert isinstance(other, list)
     other_coeffs = other
-    return FQP([fq_add(x, y) for x,y in zip(self, other_coeffs)])
+    return [fq_add(x, y) for x,y in zip(self, other_coeffs)]
 
 
-@export
 def fqp_sub(self: list, other: list) -> list:
     assert isinstance(other, list)
     other_coeffs = other
-    return FQP([fq_sub(x, y) for x,y in zip(self, other_coeffs)])
+    return [fq_sub(x, y) for x,y in zip(self, other_coeffs)]
 
 
 def modulus_coeffs_for_degree(degree: int):
@@ -140,18 +132,18 @@ def modulus_coeffs_for_degree(degree: int):
         assert False, f'Attempting to get modulus coeffs for degree {degree}'
 
 
-@export
+
 def fqp_mul(self: list, other: Any) -> list:
     assert not isinstance(self, int), f'Called fqp_mul with an integer: {self}'
     if isinstance(other, int):
-        return FQP([fq_mul(c, other) for c in self])
+        return [fq_mul(c, other) for c in self]
     else:
         assert isinstance(other, list)
         degree = len(self)
         coeffs = self
         modulus_coeffs = modulus_coeffs_for_degree(degree)
         other_coeffs = other
-        b = [FQ(0) for i in range(degree * 2 - 1)]
+        b = [0 for i in range(degree * 2 - 1)]
         for i in range(degree):
             for j in range(degree):
                 b[i + j] = fq_add(b[i + j], fq_mul(coeffs[i], other_coeffs[j]))
@@ -159,23 +151,23 @@ def fqp_mul(self: list, other: Any) -> list:
             exp, top = len(b) - degree - 1, b.pop()
             for i in range(degree):
                 b[exp + i] = fq_sub(b[exp + i], fq_mul(top, FQ(modulus_coeffs[i])))
-        return FQP(b)
+        return b
 
 
-@export
+
 def fqp_div(self: list, other: Any) -> dict:
     if isinstance(other, int):
-        return FQP([fq_div(c, other) for c in self])
+        return [fq_div(c, other) for c in self]
     else:
         assert isinstance(other, list)
         return fqp_mul(self, fqp_inv(other))
 
 
-@export
+
 def fqp_pow(self: list, other: int) -> list:
     #print(f'Calling fq_pow with: {self}, {other}')
     degree = len(self)
-    o = FQP([1] + [0] * (degree - 1))
+    o = [1] + [0] * (degree - 1)
     t = self
     while other > 0:
         if other & 1:
@@ -186,7 +178,6 @@ def fqp_pow(self: list, other: int) -> list:
 
 
 # Extended euclidean algorithm used to find the modular inverse
-@export
 def fqp_inv(self: dict) -> dict:
     degree = len(self)
     modulus_coeffs = modulus_coeffs_for_degree(degree)
@@ -204,10 +195,10 @@ def fqp_inv(self: dict) -> dict:
                 nm[i+j] = fq_sub(nm[i+j], fq_mul(lm[i], r[j]))
                 new[i+j] = fq_sub(new[i+j], fq_mul(low[i], r[j]))
         lm, low, hm, high = nm, new, lm, low
-    return fqp_div(FQP(lm[:degree]), low[0])
+    return fqp_div(lm[:degree], low[0])
 
 
-@export
+
 def fqp_eq(self: list, other: list) -> bool:
     assert isinstance(other, list)
     coeffs = self
@@ -218,57 +209,57 @@ def fqp_eq(self: list, other: list) -> bool:
     return True
 
 
-@export
+
 def fqp_ne(self: list, other: list) -> bool:
     return not fqp_eq(self, other)
 
 
-@export
+
 def fqp_neg(self: list) -> dict:
     coeffs = self
-    return FQP([-c for c in coeffs])
+    return [-c for c in coeffs]
 
 # The quadratic extension field
-@export
+
 def FQ2(coeffs: list) -> dict:
     assert len(coeffs) == 2, f'FQ2 must have 2 coefficients but had {len(coeffs)}'
-    return FQP(coeffs)
+    return coeffs
 
 # The 12th-degree extension field
-@export
+
 def FQ12(coeffs: list) -> dict:
     assert len(coeffs) == 12
-    return FQP(coeffs)
+    return coeffs
 
-@export
+
 def fq2_one(n: int = 0) -> dict:
-    return FQ2([1, 0])
+    return [1, 0]
 
-@export
+
 def fq2_zero(n: int = 0) -> dict:
-    return FQ2([0, 0])
+    return [0, 0]
 
-@export
+
 def fq12_one(n: int = 0) -> dict:
-    return FQ12([1] + [0] * (len(FQ12_modulus_coeffs) - 1))
+    return [1] + [0] * 11
 
-@export
+
 def fq12_zero(n: int = 0) -> dict:
-    return FQ12([0] * len(FQ12_modulus_coeffs))
+    return [0] * 12
 
 # Check if a point is the point at infinity
-@export
+
 def is_inf(pt: Any) -> bool:
     x, y, z = pt
     if isinstance(x, int):
         return fq_eq(z, 0)
     else:
-        zero = FQP([0] * len(z))
+        zero = [0] * len(z)
         return fqp_eq(z, zero)
 
 
 # Check that a point is on the curve defined by y**2 == x**3 + b
-@export
+
 def is_on_curve(pt: Any, b: Any) -> bool:
     if is_inf(pt):
         return True
@@ -281,7 +272,7 @@ def is_on_curve(pt: Any, b: Any) -> bool:
         return fqp_eq(a, fqp_mul(b, fqp_pow(z, 3)))
 
 # Elliptic curve doubling
-@export
+
 def double(pt: Any) -> Any:
     x, y, z = pt
     if isinstance(x, int):
@@ -306,7 +297,7 @@ def double(pt: Any) -> Any:
     return (newx, newy, newz)
 
 # Elliptic curve addition
-@export
+
 def add(p1: Any, p2: Any) -> Any:
     x1, y1, z1 = p1
     x2, y2, z2 = p2
@@ -335,8 +326,8 @@ def add(p1: Any, p2: Any) -> Any:
         newz = fq_mul(V_cubed, W)
     else:
         degree = len(x1)        
-        one = FQP([1] + [0] * (degree-1))
-        zero = FQP([0] * degree)
+        one = [1] + [0] * (degree-1)
+        zero = [0] * degree
         if fqp_eq(p1[2], zero) or fqp_eq(p2[2], zero):
             return p1 if fqp_eq(p2[2], zero) else p2
         U1 = fqp_mul(y2, z1)
@@ -361,7 +352,7 @@ def add(p1: Any, p2: Any) -> Any:
 
 
 # Elliptic curve point multiplication
-@export
+
 def multiply(pt: Any, n: Any) -> Any:
     x1, y1, z1 = tuple(pt)
     if isinstance(x1, int):
@@ -369,8 +360,8 @@ def multiply(pt: Any, n: Any) -> Any:
         zero = 0
     else:
         degree = len(x1)
-        one = FQP([1] + [0] * (degree-1))
-        zero = FQP([0] * degree)
+        one = [1] + [0] * (degree-1)
+        zero = [0] * degree
     if n == 0:
         return (one, one, zero)
     elif n == 1:
@@ -382,7 +373,7 @@ def multiply(pt: Any, n: Any) -> Any:
 
 
 
-@export
+
 def eq(p1: Any, p2: Any) -> Any:
     x1, y1, z1 = tuple(p1)
     x2, y2, z2 = tuple(p2)
@@ -396,7 +387,7 @@ def eq(p1: Any, p2: Any) -> Any:
 w = FQ12([0, 1] + [0] * 10)
 
 # Convert P => -P
-@export
+
 def neg(pt: Any) -> Any:
     if pt is None:
         return None
@@ -407,7 +398,7 @@ def neg(pt: Any) -> Any:
         return (x, fqp_neg(y), z)
 
 
-@export
+
 def normalize(pt: Any) -> Any:
     x, y, z = pt
     if isinstance(x, int):
@@ -415,17 +406,17 @@ def normalize(pt: Any) -> Any:
     else:
         return (fqp_div(x, z), fqp_div(y, z))
 
-@export
+
 def normalize1(pt: Any) -> Any:
     x, y = normalize(pt)
     if isinstance(x, int):
         one = 1
     else:
         degree = len(x)
-        one = FQP([1] + [0] * (degree-1))
+        one = [1] + [0] * (degree-1)
     return (x, y, one)
 
-@export
+
 def twist(pt: Any) -> Any:
     if pt is None:
         return None
@@ -443,7 +434,7 @@ def twist(pt: Any) -> Any:
     return (fqp_mul(nx, fqp_pow(w, 2)), fqp_mul(ny, fqp_pow(w, 3)), nz)
 
 
-@export
+
 def cast_point_to_fq12(pt: Any) -> Any:
     if pt is None:
         return None
@@ -453,7 +444,7 @@ def cast_point_to_fq12(pt: Any) -> Any:
 
 # Create a function representing the line between P1 and P2,
 # and evaluate it at T
-@export
+
 def linefunc(P1: Any, P2: Any, T: Any) -> Any:
     x1, y1, z1 = P1
     x2, y2, z2 = P2
@@ -479,7 +470,7 @@ def linefunc(P1: Any, P2: Any, T: Any) -> Any:
             return fq_sub(fq_mul(xt, z1), fq_mul(x1, zt)), fq_mul(z1, zt)
     else:
         degree = len(x1)
-        zero = FQP([0] * degree)
+        zero = [0] * degree
         m_numerator = fqp_sub(fqp_mul(y2, z1), fqp_mul(y1, z2))
         m_denominator = fqp_sub(fqp_mul(x2, z1), fqp_mul(x1, z2))
         if fqp_ne(m_denominator, zero):
@@ -496,7 +487,7 @@ def linefunc(P1: Any, P2: Any, T: Any) -> Any:
             return fqp_sub(fqp_mul(xt, z1), fqp_mul(x1, zt)), fqp_mul(z1, zt)
 
 
-@export
+
 def miller_loop(Q: Any, P: Any) -> Any:
     if Q is None or P is None:
         return fq12_one()
@@ -543,7 +534,7 @@ b2 = fqp_div(FQ2([3, 0]), FQ2([9, 1]))
 b12 = FQ12([3] + [0] * 11)
 
 
-@export
+
 def pairing(Q: Any, P: Any, final_exp: bool = True) -> Any:
     assert is_on_curve(P, b), f'P is not on the curve.'
     assert is_on_curve(Q, b2), f'Q is not on the curve.'
@@ -555,7 +546,7 @@ def pairing(Q: Any, P: Any, final_exp: bool = True) -> Any:
     return r
 
 
-@export
+
 def final_exponentiate(p: Any) -> Any:
     return fqp_pow(p, ((field_modulus ** 12 - 1) // curve_order))
 
@@ -602,7 +593,7 @@ def mimc_multi_hash(arr: list, key: str = None, num_outputs: int = 1):
     return outputs
 
 
-@export
+
 def hash_left_right(left: str, right: str) -> str:
     assert int(left) < curve_order, 'left should be inside the field'
     assert int(right) < curve_order, 'right should be inside the field'
@@ -690,7 +681,7 @@ def init(tree_levels: int = 20):
     denomination.set(1000)
 
 
-@export
+
 def insert(leaf: str) -> int:
     current_index = next_index.get()
     tree_levels = levels.get()
@@ -725,7 +716,7 @@ def insert(leaf: str) -> int:
     return current_index
 
 
-@export
+
 def is_known_root(root: str) -> bool:
     if root is None or len(root) == 0 or int(root) == 0:
         return False
@@ -746,76 +737,76 @@ def is_known_root(root: str) -> bool:
         i -= 1
     return False
 
-@export
+
 def get_last_root(i: str = None) -> str:
     return roots_var.get()[current_root_index.get()]
 
 
 def zeros(i: int) -> int:
     if i == 0:
-        return int('0x2fe54c60d3acabf3343a35b6eba15db4821b340f76e741e2249685ed4899af6c', 16)
+        return 0x2fe54c60d3acabf3343a35b6eba15db4821b340f76e741e2249685ed4899af6c
     elif i == 1:
-        return int('0x256a6135777eee2fd26f54b8b7037a25439d5235caee224154186d2b8a52e31d', 16)
+        return 0x256a6135777eee2fd26f54b8b7037a25439d5235caee224154186d2b8a52e31d
     elif i == 2:
-        return int('0x1151949895e82ab19924de92c40a3d6f7bcb60d92b00504b8199613683f0c200', 16)
+        return 0x1151949895e82ab19924de92c40a3d6f7bcb60d92b00504b8199613683f0c200
     elif i == 3:
-        return int('0x20121ee811489ff8d61f09fb89e313f14959a0f28bb428a20dba6b0b068b3bdb', 16)
+        return 0x20121ee811489ff8d61f09fb89e313f14959a0f28bb428a20dba6b0b068b3bdb
     elif i == 4:
-        return int('0x0a89ca6ffa14cc462cfedb842c30ed221a50a3d6bf022a6a57dc82ab24c157c9', 16)
+        return 0x0a89ca6ffa14cc462cfedb842c30ed221a50a3d6bf022a6a57dc82ab24c157c9
     elif i == 5:
-        return int('0x24ca05c2b5cd42e890d6be94c68d0689f4f21c9cec9c0f13fe41d566dfb54959', 16)
+        return 0x24ca05c2b5cd42e890d6be94c68d0689f4f21c9cec9c0f13fe41d566dfb54959
     elif i == 6:
-        return int('0x1ccb97c932565a92c60156bdba2d08f3bf1377464e025cee765679e604a7315c', 16)
+        return 0x1ccb97c932565a92c60156bdba2d08f3bf1377464e025cee765679e604a7315c
     elif i == 7:
-        return int('0x19156fbd7d1a8bf5cba8909367de1b624534ebab4f0f79e003bccdd1b182bdb4', 16)
+        return 0x19156fbd7d1a8bf5cba8909367de1b624534ebab4f0f79e003bccdd1b182bdb4
     elif i == 8:
-        return int('0x261af8c1f0912e465744641409f622d466c3920ac6e5ff37e36604cb11dfff80', 16)
+        return 0x261af8c1f0912e465744641409f622d466c3920ac6e5ff37e36604cb11dfff80
     elif i == 9:
-        return int('0x0058459724ff6ca5a1652fcbc3e82b93895cf08e975b19beab3f54c217d1c007', 16)
+        return 0x0058459724ff6ca5a1652fcbc3e82b93895cf08e975b19beab3f54c217d1c007
     elif i == 10:
-        return int('0x1f04ef20dee48d39984d8eabe768a70eafa6310ad20849d4573c3c40c2ad1e30', 16)
+        return 0x1f04ef20dee48d39984d8eabe768a70eafa6310ad20849d4573c3c40c2ad1e30
     elif i == 11:
-        return int('0x1bea3dec5dab51567ce7e200a30f7ba6d4276aeaa53e2686f962a46c66d511e5', 16)
+        return 0x1bea3dec5dab51567ce7e200a30f7ba6d4276aeaa53e2686f962a46c66d511e5
     elif i == 12:
-        return int('0x0ee0f941e2da4b9e31c3ca97a40d8fa9ce68d97c084177071b3cb46cd3372f0f', 16)
+        return 0x0ee0f941e2da4b9e31c3ca97a40d8fa9ce68d97c084177071b3cb46cd3372f0f
     elif i == 13:
-        return int('0x1ca9503e8935884501bbaf20be14eb4c46b89772c97b96e3b2ebf3a36a948bbd', 16)
+        return 0x1ca9503e8935884501bbaf20be14eb4c46b89772c97b96e3b2ebf3a36a948bbd
     elif i == 14:
-        return int('0x133a80e30697cd55d8f7d4b0965b7be24057ba5dc3da898ee2187232446cb108', 16)
+        return 0x133a80e30697cd55d8f7d4b0965b7be24057ba5dc3da898ee2187232446cb108
     elif i == 15:
-        return int('0x13e6d8fc88839ed76e182c2a779af5b2c0da9dd18c90427a644f7e148a6253b6', 16)
+        return 0x13e6d8fc88839ed76e182c2a779af5b2c0da9dd18c90427a644f7e148a6253b6
     elif i == 16:
-        return int('0x1eb16b057a477f4bc8f572ea6bee39561098f78f15bfb3699dcbb7bd8db61854', 16)
+        return 0x1eb16b057a477f4bc8f572ea6bee39561098f78f15bfb3699dcbb7bd8db61854
     elif i == 17:
-        return int('0x0da2cb16a1ceaabf1c16b838f7a9e3f2a3a3088d9e0a6debaa748114620696ea', 16)
+        return 0x0da2cb16a1ceaabf1c16b838f7a9e3f2a3a3088d9e0a6debaa748114620696ea
     elif i == 18:
-        return int('0x24a3b3d822420b14b5d8cb6c28a574f01e98ea9e940551d2ebd75cee12649f9d', 16)
+        return 0x24a3b3d822420b14b5d8cb6c28a574f01e98ea9e940551d2ebd75cee12649f9d
     elif i == 19:
-        return int('0x198622acbd783d1b0d9064105b1fc8e4d8889de95c4c519b3f635809fe6afc05', 16)
+        return 0x198622acbd783d1b0d9064105b1fc8e4d8889de95c4c519b3f635809fe6afc05
     elif i == 20:
-        return int('0x29d7ed391256ccc3ea596c86e933b89ff339d25ea8ddced975ae2fe30b5296d4', 16)
+        return 0x29d7ed391256ccc3ea596c86e933b89ff339d25ea8ddced975ae2fe30b5296d4
     elif i == 21:
-        return int('0x19be59f2f0413ce78c0c3703a3a5451b1d7f39629fa33abd11548a76065b2967', 16)
+        return 0x19be59f2f0413ce78c0c3703a3a5451b1d7f39629fa33abd11548a76065b2967
     elif i == 22:
-        return int('0x1ff3f61797e538b70e619310d33f2a063e7eb59104e112e95738da1254dc3453', 16)
+        return 0x1ff3f61797e538b70e619310d33f2a063e7eb59104e112e95738da1254dc3453
     elif i == 23:
-        return int('0x10c16ae9959cf8358980d9dd9616e48228737310a10e2b6b731c1a548f036c48', 16)
+        return 0x10c16ae9959cf8358980d9dd9616e48228737310a10e2b6b731c1a548f036c48
     elif i == 24:
-        return int('0x0ba433a63174a90ac20992e75e3095496812b652685b5e1a2eae0b1bf4e8fcd1', 16)
+        return 0x0ba433a63174a90ac20992e75e3095496812b652685b5e1a2eae0b1bf4e8fcd1
     elif i == 25:
-        return int('0x019ddb9df2bc98d987d0dfeca9d2b643deafab8f7036562e627c3667266a044c', 16)
+        return 0x019ddb9df2bc98d987d0dfeca9d2b643deafab8f7036562e627c3667266a044c
     elif i == 26:
-        return int('0x2d3c88b23175c5a5565db928414c66d1912b11acf974b2e644caaac04739ce99', 16)
+        return 0x2d3c88b23175c5a5565db928414c66d1912b11acf974b2e644caaac04739ce99
     elif i == 27:
-        return int('0x2eab55f6ae4e66e32c5189eed5c470840863445760f5ed7e7b69b2a62600f354', 16)
+        return 0x2eab55f6ae4e66e32c5189eed5c470840863445760f5ed7e7b69b2a62600f354
     elif i == 28:
-        return int('0x002df37a2642621802383cf952bf4dd1f32e05433beeb1fd41031fb7eace979d', 16)
+        return 0x002df37a2642621802383cf952bf4dd1f32e05433beeb1fd41031fb7eace979d
     elif i == 29:
-        return int('0x104aeb41435db66c3e62feccc1d6f5d98d0a0ed75d1374db457cf462e3a1f427', 16)
+        return 0x104aeb41435db66c3e62feccc1d6f5d98d0a0ed75d1374db457cf462e3a1f427
     elif i == 30:
-        return int('0x1f3c6fd858e9a7d4b0d1f38e256a09d81d5a5e3c963987e2d4b814cfab7c6ebb', 16)
+        return 0x1f3c6fd858e9a7d4b0d1f38e256a09d81d5a5e3c963987e2d4b814cfab7c6ebb
     elif i == 31:
-        return int('0x2c7a07d20dff79d01fecedc1134284a8d08436606c93693b67e333f671bf69cc', 16)
+        return 0x2c7a07d20dff79d01fecedc1134284a8d08436606c93693b67e333f671bf69cc
     else:
          assert False, "Index out of bounds"
 
@@ -825,9 +816,9 @@ Tornado
 '''
 
 @export
-def deposit(commitment: str, encrypted_note: str):
+def deposit(commitment: str):
     assert commitments[commitment] is None, 'The commitment has been submitted.'
-    inserted_index = insert(commitment)
+    insert(commitment)
     commitments[commitment] = True
     process_deposit(ctx.caller)    
 
@@ -880,17 +871,16 @@ def process_withdraw(recipient: str, relayer: str, fee: int, refund: int):
     if fee > 0:
         token.transfer(
             to=relayer,
-            amount = fee
+            amount=fee
         )
 
     total_deposit_balance.set(total_deposit_balance.get() - (amount + fee))
 
 
-@export
 def is_spent(nullifier_hash: str) -> bool:
     return nullifier_hashes[nullifier_hash] is not None
 
-@export
+
 def is_spent_array(nullifier_hash_array: list) -> list:
     spent = []
     for nullifier_hash in nullifier_hash_array:
@@ -898,8 +888,7 @@ def is_spent_array(nullifier_hash_array: list) -> list:
     return spent
 
 
-vk = {}
-vk_tmp = {
+vk = {
     "IC": [
         [
             16225148364316337376768119297456868908427925829817748684139175309620217098814,
@@ -986,13 +975,7 @@ vk_tmp = {
     ],
 }
 
-vk['alfa1'] = tuple(vk_tmp['vk_alfa_1'])
-vk['beta2'] = (FQ2(vk_tmp['vk_beta_2'][0]), FQ2(vk_tmp['vk_beta_2'][1]), FQ2(vk_tmp['vk_beta_2'][2]))
-vk['gamma2'] = (FQ2(vk_tmp['vk_gamma_2'][0]), FQ2(vk_tmp['vk_gamma_2'][1]), FQ2(vk_tmp['vk_gamma_2'][2]))
-vk['delta2'] = (FQ2(vk_tmp['vk_delta_2'][0]), FQ2(vk_tmp['vk_delta_2'][1]), FQ2(vk_tmp['vk_delta_2'][2]))
-vk['IC'] = [tuple(x) for x in vk_tmp['IC']]
 
-@export
 def verify(
     inputs: list, 
     proof: dict) -> int:
@@ -1008,15 +991,15 @@ def verify(
 
     p1 = [
         neg(proof['A']),
-        vk['alfa1'],
+        vk['vk_alfa_1'],
         vk_x,
         proof['C']
     ]
     p2 = [
         (proof['B'][0], proof['B'][1], proof['B'][2]),
-        vk['beta2'],
-        vk['gamma2'],
-        vk['delta2']
+        vk['vk_beta_2'],
+        vk['vk_gamma_2'],
+        vk['vk_delta_2']
     ]
     x = fq12_one()
     for i in range(len(p1)):
@@ -1031,7 +1014,7 @@ def verify(
         return 1
     return 0
 
-@export
+
 def verify_proof(
     a: list,
     b: list,
