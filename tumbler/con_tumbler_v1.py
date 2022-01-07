@@ -17,7 +17,6 @@ curve_order = 218882428718392752222464057452572750885483644004160343436982041865
 
 # Extended euclidean algorithm to find modular inverses for
 # integers
-
 def inv(a: int, n: int) -> int:
     if a == 0:
         return 0
@@ -30,31 +29,25 @@ def inv(a: int, n: int) -> int:
     return lm % n
 
 
-
 def FQ(n: int) -> int:
     return n % field_modulus
-
 
 
 def fq_add(self: int, other: int) -> int:
     return (self + other) % field_modulus
 
 
-
 def fq_mul(self: int, other: int) -> int:
     return (self * other) % field_modulus
-
 
 
 def fq_sub(self: int, other: int) -> int:
     return (self - other) % field_modulus
 
 
-
 def fq_div(self: int, other: int) -> int:
     assert isinstance(other, int), 'Invalid other. Should be an int.'
     return fq_mul(self, inv(other, field_modulus)) % field_modulus
-
 
 
 def fq_pow(self: int, other: int) -> int:
@@ -72,15 +65,12 @@ def fq_eq(self: int, other: int) -> bool:
     return self == other
 
 
-
 def fq_ne(self: int, other: int) -> int:
     return not fq_eq(self, other)
 
 
-
 def fq_neg(self: int) -> int:
     return -self
-
 
 
 def fq_one(n: int = None) -> int:
@@ -90,8 +80,8 @@ def fq_one(n: int = None) -> int:
 def fq_zero(n: int = None) -> int:
     return FQ(0)
 
-# Utility methods for polynomial math
 
+# Utility methods for polynomial math
 def deg(p: list) -> int:
     d = len(p) - 1
     while p[d] == 0 and d:
@@ -132,7 +122,6 @@ def modulus_coeffs_for_degree(degree: int):
         assert False, f'Attempting to get modulus coeffs for degree {degree}'
 
 
-
 def fqp_mul(self: list, other: Any) -> list:
     assert not isinstance(self, int), f'Called fqp_mul with an integer: {self}'
     if isinstance(other, int):
@@ -154,14 +143,12 @@ def fqp_mul(self: list, other: Any) -> list:
         return b
 
 
-
 def fqp_div(self: list, other: Any) -> dict:
     if isinstance(other, int):
         return [fq_div(c, other) for c in self]
     else:
         assert isinstance(other, list)
         return fqp_mul(self, fqp_inv(other))
-
 
 
 def fqp_pow(self: list, other: int) -> list:
@@ -198,7 +185,6 @@ def fqp_inv(self: dict) -> dict:
     return fqp_div(lm[:degree], low[0])
 
 
-
 def fqp_eq(self: list, other: list) -> bool:
     assert isinstance(other, list)
     coeffs = self
@@ -209,24 +195,22 @@ def fqp_eq(self: list, other: list) -> bool:
     return True
 
 
-
 def fqp_ne(self: list, other: list) -> bool:
     return not fqp_eq(self, other)
-
 
 
 def fqp_neg(self: list) -> dict:
     coeffs = self
     return [-c for c in coeffs]
 
-# The quadratic extension field
 
+# The quadratic extension field
 def FQ2(coeffs: list) -> dict:
     assert len(coeffs) == 2, f'FQ2 must have 2 coefficients but had {len(coeffs)}'
     return coeffs
 
-# The 12th-degree extension field
 
+# The 12th-degree extension field
 def FQ12(coeffs: list) -> dict:
     assert len(coeffs) == 12
     return coeffs
@@ -247,8 +231,8 @@ def fq12_one(n: int = 0) -> dict:
 def fq12_zero(n: int = 0) -> dict:
     return [0] * 12
 
-# Check if a point is the point at infinity
 
+# Check if a point is the point at infinity
 def is_inf(pt: Any) -> bool:
     x, y, z = pt
     if isinstance(x, int):
@@ -259,7 +243,6 @@ def is_inf(pt: Any) -> bool:
 
 
 # Check that a point is on the curve defined by y**2 == x**3 + b
-
 def is_on_curve(pt: Any, b: Any) -> bool:
     if is_inf(pt):
         return True
@@ -271,8 +254,8 @@ def is_on_curve(pt: Any, b: Any) -> bool:
         a = fqp_sub(fqp_mul(fqp_pow(y,2), z), fqp_pow(x, 3))
         return fqp_eq(a, fqp_mul(b, fqp_pow(z, 3)))
 
-# Elliptic curve doubling
 
+# Elliptic curve doubling
 def double(pt: Any) -> Any:
     x, y, z = pt
     if isinstance(x, int):
@@ -293,11 +276,10 @@ def double(pt: Any) -> Any:
         newx = fqp_mul(H, fqp_mul(S, 2))
         newy = fqp_sub(fqp_mul(W, fqp_sub(fqp_mul(B, 4), H)), fqp_mul(y, fqp_mul(y, fqp_mul(S_squared, 8))))
         newz = fqp_mul(S_squared, fqp_mul(S, 8))
-    #return normalize1((newx, newy, newz))
     return (newx, newy, newz)
 
-# Elliptic curve addition
 
+# Elliptic curve addition
 def add(p1: Any, p2: Any) -> Any:
     x1, y1, z1 = p1
     x2, y2, z2 = p2
@@ -352,7 +334,6 @@ def add(p1: Any, p2: Any) -> Any:
 
 
 # Elliptic curve point multiplication
-
 def multiply(pt: Any, n: Any) -> Any:
     x1, y1, z1 = tuple(pt)
     if isinstance(x1, int):
@@ -372,8 +353,6 @@ def multiply(pt: Any, n: Any) -> Any:
         return add(multiply(double(pt), int(n // 2)), pt)
 
 
-
-
 def eq(p1: Any, p2: Any) -> Any:
     x1, y1, z1 = tuple(p1)
     x2, y2, z2 = tuple(p2)
@@ -386,8 +365,8 @@ def eq(p1: Any, p2: Any) -> Any:
 # "Twist" a point in E(FQ2) into a point in E(FQ12)
 w = FQ12([0, 1] + [0] * 10)
 
-# Convert P => -P
 
+# Convert P => -P
 def neg(pt: Any) -> Any:
     if pt is None:
         return None
@@ -396,7 +375,6 @@ def neg(pt: Any) -> Any:
         return (x, fq_neg(y), z)
     else:
         return (x, fqp_neg(y), z)
-
 
 
 def normalize(pt: Any) -> Any:
@@ -434,7 +412,6 @@ def twist(pt: Any) -> Any:
     return (fqp_mul(nx, fqp_pow(w, 2)), fqp_mul(ny, fqp_pow(w, 3)), nz)
 
 
-
 def cast_point_to_fq12(pt: Any) -> Any:
     if pt is None:
         return None
@@ -444,7 +421,6 @@ def cast_point_to_fq12(pt: Any) -> Any:
 
 # Create a function representing the line between P1 and P2,
 # and evaluate it at T
-
 def linefunc(P1: Any, P2: Any, T: Any) -> Any:
     x1, y1, z1 = P1
     x2, y2, z2 = P2
@@ -593,7 +569,6 @@ def mimc_multi_hash(arr: list, key: str = None, num_outputs: int = 1):
     return outputs
 
 
-
 def hash_left_right(left: str, right: str) -> str:
     assert int(left) < curve_order, 'left should be inside the field'
     assert int(right) < curve_order, 'right should be inside the field'
@@ -637,7 +612,6 @@ def mimc_affine(self: int) -> int:
     return aux
 
 # con_merkle_tree_v1
-
 current_root_index = Variable()
 next_index = Variable()
 levels = Variable()
