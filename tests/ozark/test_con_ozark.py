@@ -12,6 +12,7 @@ module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'ozark')
 VERIFIER_CONTRACT = 'con_verifier_v1'
 OZARK_CONTRACT = 'con_ozark_v1'
 PHI_CONTRACT = 'con_phi_lst001'
+DENOMINATION = 100_000
 
 t0 = time.time()
 
@@ -31,7 +32,7 @@ print(f'Time to submit VERIFIER_CONTRACT: {time.time()-t1}')
 t1 = time.time()
 with open(os.path.join(module_dir, f'{OZARK_CONTRACT}.py'), 'r') as f:
     code = f.read()
-    client.submit(code, name=OZARK_CONTRACT, signer='me')
+    client.submit(code, name=OZARK_CONTRACT, signer='me', constructor_args={'token_contract_value': PHI_CONTRACT})
 
 print(f'Time to submit OZARK_CONTRACT: {time.time()-t1}')
 
@@ -67,6 +68,8 @@ class MyTestCase(unittest.TestCase):
 
         print_merkle_tree_state(contract)
         denomination = contract.quick_read('denomination')
+        self.assertEqual(denomination, DENOMINATION)
+
         phi = get_contract_for_signer(PHI_CONTRACT, 'me')
 
         t0 = time.time()

@@ -1,12 +1,46 @@
 # con_ozark_v1
 import con_verifier_v1 as verifier
-import con_phi_lst001 as phi
-
-denomination = Variable()
-total_deposit_balance = Variable()
-commitments = Hash(default_value=None)
-nullifier_hashes = Hash(default_value=None)
 I = importlib
+
+# Main variables
+denomination = Variable()
+token_contract = Variable()
+total_deposit_balance = Variable()
+
+# Merkle Tree Variables
+commitments = Hash(default_value=None)
+commitment_history = Hash(default_value=None)
+nullifier_hashes = Hash(default_value=None)
+current_root_index = Variable()
+next_index = Variable()
+roots_var = Variable()
+filled_subtrees_var = Variable()
+
+ROOT_HISTORY_SIZE = 30
+TREE_LEVELS = 20
+
+
+@construct
+def init(denomination_value: int = 100_000, token_contract_value: str = 'currency'):
+    assert TREE_LEVELS > 0, 'tree_levels should be greater than zero'
+    assert TREE_LEVELS < 32, 'tree_levels should be less than 32'
+    filled_subtrees = []
+    roots = [None] * ROOT_HISTORY_SIZE
+
+    for i in range(TREE_LEVELS):
+        filled_subtrees.append(zeros(i))
+
+    roots[0] = zeros(TREE_LEVELS-1)
+
+    # Set variables
+    current_root_index.set(0)
+    next_index.set(0)
+    roots_var.set(roots)
+    filled_subtrees_var.set(filled_subtrees)
+
+    total_deposit_balance.set(0)
+    denomination.set(denomination_value)
+    token_contract.set(token_contract_value)
 
 
 @export
@@ -14,12 +48,14 @@ def deposit(commitment: str):
     assert commitments[commitment] is None, 'The commitment has been submitted.'
     insert(commitment)
     commitments[commitment] = True
+    commitment_history[next_index.get()] = commitment
     process_deposit(ctx.caller)    
 
 
 def process_deposit(caller: str):
     amount = denomination.get()
-    phi.transfer_from(
+    token = I.import_module(token_contract.get())
+    token.transfer_from(
         to=ctx.this,
         amount=amount,
         main_account=caller
@@ -54,12 +90,13 @@ def process_withdraw(recipient: str, relayer: str, fee: int, refund: int):
     amount = denomination.get() - fee
     assert amount > 0, 'Nothing to withdraw.'
 
-    phi.transfer(
+    token = I.import_module(token_contract.get())
+    token.transfer(
         to=recipient,
         amount=amount
     )
     if fee > 0:
-        phi.transfer(
+        token.transfer(
             to=relayer,
             amount=fee
         )
@@ -152,39 +189,6 @@ def mimc_affine(self: int) -> int:
         if aux >= curve_order:
             aux = aux % curve_order
     return aux
-
-
-current_root_index = Variable()
-next_index = Variable()
-roots_var = Variable()
-filled_subtrees_var = Variable()
-
-ROOT_HISTORY_SIZE = 30
-FIELD_SIZE = 21888242871839275222246405745257275088548364400416034343698204186575808495617
-ZERO_VALUE = 21663839004416932945382355908790599225266501822907911457504978515578255421292
-TREE_LEVELS = 20
-
-
-@construct
-def init():
-    assert TREE_LEVELS > 0, 'tree_levels should be greater than zero'
-    assert TREE_LEVELS < 32, 'tree_levels should be less than 32'
-    filled_subtrees = []
-    roots = [None] * ROOT_HISTORY_SIZE
-
-    for i in range(TREE_LEVELS):
-        filled_subtrees.append(zeros(i))
-
-    roots[0] = zeros(TREE_LEVELS-1)
-
-    # Set variables
-    current_root_index.set(0)
-    next_index.set(0)
-    roots_var.set(roots)
-    filled_subtrees_var.set(filled_subtrees)
-
-    total_deposit_balance.set(0)
-    denomination.set(1000)
 
 
 def insert(leaf: str) -> int:
