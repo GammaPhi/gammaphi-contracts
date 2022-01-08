@@ -9,7 +9,9 @@ client = ContractingClient()
 
 module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'ozark')
 
-MERKE_TREE_CONTRACT = 'con_ozark_v1'
+MERKLE_TREE_CONTRACT = 'con_merkle_tree_v1'
+VERIFIER_CONTRACT = 'con_verifier_v1'
+OZARK_CONTRACT = 'con_ozark_v1'
 PHI_CONTRACT = 'con_phi_lst001'
 
 t0 = time.time()
@@ -20,11 +22,26 @@ with open(join(dirname(module_dir), 'core', f'{PHI_CONTRACT}.py'), 'r') as f:
 
 print(f'Time to submit PHI_CONTRACT: {time.time()-t0}')
 t1 = time.time()
-with open(os.path.join(module_dir, f'{MERKE_TREE_CONTRACT}.py'), 'r') as f:
+with open(os.path.join(module_dir, f'{MERKLE_TREE_CONTRACT}.py'), 'r') as f:
     code = f.read()
-    client.submit(code, name=MERKE_TREE_CONTRACT, signer='me')
+    client.submit(code, name=MERKLE_TREE_CONTRACT, signer='me')
 
-print(f'Time to submit MERKE_TREE_CONTRACT: {time.time()-t1}')
+print(f'Time to submit MERKLE_TREE_CONTRACT: {time.time()-t1}')
+
+t1 = time.time()
+with open(os.path.join(module_dir, f'{VERIFIER_CONTRACT}.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=VERIFIER_CONTRACT, signer='me')
+
+print(f'Time to submit VERIFIER_CONTRACT: {time.time()-t1}')
+
+t1 = time.time()
+with open(os.path.join(module_dir, f'{OZARK_CONTRACT}.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=OZARK_CONTRACT, signer='me')
+
+print(f'Time to submit OZARK_CONTRACT: {time.time()-t1}')
+
 print(f'Time to submit contracts: {time.time()-t0}')
 
 def get_contract_for_signer(contract: str, signer: str):
@@ -53,7 +70,7 @@ def to_base10_str(i: str) -> str:
 
 class MyTestCase(unittest.TestCase):
     def test_e2e(self):
-        contract = get_contract_for_signer(MERKE_TREE_CONTRACT, 'me')
+        contract = get_contract_for_signer(OZARK_CONTRACT, 'me')
 
         print_merkle_tree_state(contract)
         denomination = contract.quick_read('denomination')
@@ -62,10 +79,11 @@ class MyTestCase(unittest.TestCase):
         t0 = time.time()
         phi.approve(
             amount=denomination,
-            to=MERKE_TREE_CONTRACT
+            to=OZARK_CONTRACT
         )
         print(f'Time to approve PHI: {time.time()-t0}')
-        roots = contract.quick_read('roots_var')
+        merkle_tree = get_contract_for_signer(MERKLE_TREE_CONTRACT, 'me')
+        roots = merkle_tree.quick_read('roots_var')
         self.assertIsNone(roots[1])
         self.assertIsNotNone(roots[0])
 
@@ -81,13 +99,13 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(my_balance_after, my_balance - denomination)
         
 
-        roots = contract.quick_read('roots_var')
+        roots = merkle_tree.quick_read('roots_var')
         self.assertIsNotNone(roots[1])
         self.assertIsNotNone(roots[0])
 
         print_merkle_tree_state(contract)
 
-        contract = get_contract_for_signer(MERKE_TREE_CONTRACT, 'you')
+        contract = get_contract_for_signer(OZARK_CONTRACT, 'you')
         
         # Invalid commitment
         self.assertRaises(
@@ -168,7 +186,7 @@ class MyTestCase(unittest.TestCase):
 
         recipient = inputs[2]
 
-        contract = get_contract_for_signer(MERKE_TREE_CONTRACT, 'you')
+        contract = get_contract_for_signer(OZARK_CONTRACT, 'you')
         recipient_balance = phi.quick_read('balances', recipient)
         self.assertIsNone(recipient_balance)
 
