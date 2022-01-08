@@ -4,9 +4,6 @@ field_modulus = 2188824287183927522224640574525727508869631115729782366268903789
 
 # The modulus of the polynomial in this representation of FQ12
 FQ12_modulus_coeffs = [82, 0, 0, 0, 0, 0, -18, 0, 0, 0, 0, 0] # Implied + [1]
-
-ate_loop_count = 29793968203157093288
-log_ate_loop_count = 63
 pseudo_binary_encoding = [0, 0, 0, 1, 0, 1, 0, -1, 0, 0, 1, -1, 0, 0, 1, 0,
                           0, 1, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 0, 0, 1, 1,
                           1, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, 1,
@@ -14,8 +11,7 @@ pseudo_binary_encoding = [0, 0, 0, 1, 0, 1, 0, -1, 0, 0, 1, -1, 0, 0, 1, 0,
 curve_order = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
 
-# Extended euclidean algorithm to find modular inverses for
-# integers
+# Extended euclidean algorithm to find modular inverses for integers
 def inv(a: int, n: int) -> int:
     if a == 0:
         return 0
@@ -142,7 +138,7 @@ def fqp_mul(self: list, other: Any) -> list:
         return b
 
 
-def fqp_div(self: list, other: Any) -> dict:
+def fqp_div(self: list, other: Any) -> list:
     if isinstance(other, int):
         return [fq_div(c, other) for c in self]
     else:
@@ -164,7 +160,7 @@ def fqp_pow(self: list, other: int) -> list:
 
 
 # Extended euclidean algorithm used to find the modular inverse
-def fqp_inv(self: dict) -> dict:
+def fqp_inv(self: list) -> list:
     degree = len(self)
     modulus_coeffs = modulus_coeffs_for_degree(degree)
     coeffs = self
@@ -198,36 +194,36 @@ def fqp_ne(self: list, other: list) -> bool:
     return not fqp_eq(self, other)
 
 
-def fqp_neg(self: list) -> dict:
+def fqp_neg(self: list) -> list:
     coeffs = self
     return [-c for c in coeffs]
 
 
 # The quadratic extension field
-def FQ2(coeffs: list) -> dict:
+def FQ2(coeffs: list) -> list:
     assert len(coeffs) == 2, f'FQ2 must have 2 coefficients but had {len(coeffs)}'
     return coeffs
 
 
 # The 12th-degree extension field
-def FQ12(coeffs: list) -> dict:
+def FQ12(coeffs: list) -> list:
     assert len(coeffs) == 12
     return coeffs
 
 
-def fq2_one(n: int = 0) -> dict:
+def fq2_one(n: int = 0) -> list:
     return [1, 0]
 
 
-def fq2_zero(n: int = 0) -> dict:
+def fq2_zero(n: int = 0) -> list:
     return [0, 0]
 
 
-def fq12_one(n: int = 0) -> dict:
+def fq12_one(n: int = 0) -> list:
     return [1] + [0] * 11
 
 
-def fq12_zero(n: int = 0) -> dict:
+def fq12_zero(n: int = 0) -> list:
     return [0] * 12
 
 
