@@ -9,7 +9,6 @@ client = ContractingClient()
 
 module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'ozark')
 
-MERKLE_TREE_CONTRACT = 'con_merkle_tree_v1'
 VERIFIER_CONTRACT = 'con_verifier_v1'
 OZARK_CONTRACT = 'con_ozark_v1'
 PHI_CONTRACT = 'con_phi_lst001'
@@ -21,12 +20,6 @@ with open(join(dirname(module_dir), 'core', f'{PHI_CONTRACT}.py'), 'r') as f:
     client.submit(code, name=PHI_CONTRACT, signer='me')
 
 print(f'Time to submit PHI_CONTRACT: {time.time()-t0}')
-t1 = time.time()
-with open(os.path.join(module_dir, f'{MERKLE_TREE_CONTRACT}.py'), 'r') as f:
-    code = f.read()
-    client.submit(code, name=MERKLE_TREE_CONTRACT, signer='me')
-
-print(f'Time to submit MERKLE_TREE_CONTRACT: {time.time()-t1}')
 
 t1 = time.time()
 with open(os.path.join(module_dir, f'{VERIFIER_CONTRACT}.py'), 'r') as f:
@@ -82,8 +75,7 @@ class MyTestCase(unittest.TestCase):
             to=OZARK_CONTRACT
         )
         print(f'Time to approve PHI: {time.time()-t0}')
-        merkle_tree = get_contract_for_signer(MERKLE_TREE_CONTRACT, 'me')
-        roots = merkle_tree.quick_read('roots_var')
+        roots = contract.quick_read('roots_var')
         self.assertIsNone(roots[1])
         self.assertIsNotNone(roots[0])
 
@@ -99,7 +91,7 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(my_balance_after, my_balance - denomination)
         
 
-        roots = merkle_tree.quick_read('roots_var')
+        roots = contract.quick_read('roots_var')
         self.assertIsNotNone(roots[1])
         self.assertIsNotNone(roots[0])
 
