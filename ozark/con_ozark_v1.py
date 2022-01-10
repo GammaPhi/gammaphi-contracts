@@ -1,4 +1,5 @@
 # con_ozark_v1
+
 import con_verifier_v1 as verifier
 I = importlib
 
@@ -73,8 +74,8 @@ def withdraw(a: list, b: list, c: list, root: str, nullifier_hash: str, recipien
         inputs=[
             int(root, 10), 
             int(nullifier_hash, 10),
-            int(recipient, 10),
-            int(relayer, 10),
+            int(recipient, 16),
+            int(relayer, 16),
             int(fee, 10),
             int(refund, 10),
         ],

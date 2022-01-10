@@ -537,3 +537,5 @@ G2 = (FQ2([108570469990230571359445707622328294813707563595785180869905199932856
 # Check that the twist creates a point that is on the curve
 G12 = twist(G2)
 assert is_on_curve(G12, b12)
+
+print('B', b2)

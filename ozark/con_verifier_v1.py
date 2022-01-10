@@ -8,7 +8,6 @@ pseudo_binary_encoding = [0, 0, 0, 1, 0, 1, 0, -1, 0, 0, 1, -1, 0, 0, 1, 0,
                           0, 1, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 0, 0, 1, 1,
                           1, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, 1,
                           1, 0, 0, -1, 0, 0, 0, 1, 1, 0, -1, 0, 0, 1, 0, 1, 1]
-curve_order = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
 
 # Extended euclidean algorithm to find modular inverses for integers
@@ -483,11 +482,8 @@ def miller_loop(Q: Any, P: Any) -> Any:
             f_num = fqp_mul(f_num, n)
             f_den = fqp_mul(f_den, d)
             R = add(R, nQ)
-    #assert R == multiply(Q, ate_loop_count)
     Q1 = (fqp_pow(Q[0], field_modulus), fqp_pow(Q[1], field_modulus), fqp_pow(Q[2], field_modulus))
-    #assert is_on_curve(Q1, b12)
     nQ2 = (fqp_pow(Q1[0], field_modulus), fqp_pow(fqp_neg(Q1[1]), field_modulus), fqp_pow(Q1[2], field_modulus))
-    #assert is_on_curve(nQ2, b12)
     n1, d1 = linefunc(R, Q1, P)
     R = add(R, Q1)
     n2, d2 = linefunc(R, nQ2, P)
@@ -497,27 +493,20 @@ def miller_loop(Q: Any, P: Any) -> Any:
 
 
 # Pairing computation
-# Curve is y**2 = x**3 + 3
-b = FQ(3)
-# Twisted curve over FQ**2
-b2 = fqp_div(FQ2([3, 0]), FQ2([9, 1]))
-# Extension curve over FQ**12; same b value as over FQ
-b12 = FQ12([3] + [0] * 11)
-
-
-def pairing(Q: Any, P: Any, final_exp: bool = True) -> Any:
+def pairing(Q: Any, P: Any) -> Any:
+    b = FQ(3)
+    # Twisted curve over FQ**2
+    b2 = fqp_div(FQ2([3, 0]), FQ2([9, 1]))
     assert is_on_curve(P, b), f'P is not on the curve.'
     assert is_on_curve(Q, b2), f'Q is not on the curve.'
     if fq_eq(P[-1], fq_zero()) or fqp_eq(Q[-1], fq2_zero()):
         return fq12_one()
     r = miller_loop(twist(Q), cast_point_to_fq12(P))
-    if final_exp:
-        r = final_exponentiate(r)
     return r
 
 
 def final_exponentiate(p: Any) -> Any:
-    return fqp_pow(p, ((field_modulus ** 12 - 1) // curve_order))
+    return fqp_pow(p, ((field_modulus ** 12 - 1) // 21888242871839275222246405745257275088548364400416034343698204186575808495617))
 
 
 vk = {
@@ -637,7 +626,7 @@ def verify(
     for i in range(len(p1)):
         if is_inf(p2[i]) or is_inf(p1[i]):
             continue
-        y = pairing(p2[i], p1[i], False)
+        y = pairing(p2[i], p1[i])
         x = fqp_mul(x, y)
 
     x = final_exponentiate(x)    
