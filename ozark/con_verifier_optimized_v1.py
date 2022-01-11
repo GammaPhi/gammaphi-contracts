@@ -1,4 +1,4 @@
-# con_verifier_optimized_v1 (in progress)
+# con_verifier_optimized_v1
 pseudo_binary_encoding = [0, 0, 0, 1, 0, 1, 0, -1, 0, 0, 1, -1, 0, 0, 1, 0,
                           0, 1, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 0, 0, 1, 1,
                           1, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, 1,
@@ -601,11 +601,8 @@ def twist_add(a: list, b: list) -> list:
     xEqual = fq2_eq(h, fq2_zero())
 
     t = fq2_add(h, h)
-
     i = fq2_square(t)
-
     j = fq2_mul(h, i)
-
     t = fq2_sub(s2, s1)
 
     yEqual = fq2_eq(t, fq2_zero())
@@ -614,7 +611,6 @@ def twist_add(a: list, b: list) -> list:
         return twist_double(a)
 
     r = fq2_add(t, t)
-
     v = fq2_mul(u1, i)
 
     t4 = fq2_square(r)
