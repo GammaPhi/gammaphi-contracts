@@ -1,6 +1,6 @@
 # con_ozark_v1
 
-import con_verifier_v1 as verifier
+import con_verifier_optimized_v1 as verifier
 I = importlib
 
 # Main variables
