@@ -1,6 +1,6 @@
 # con_ozark_v1
 
-import con_verifier_optimized_v1 as verifier
+import con_verifier_optimized as verifier
 I = importlib
 
 # Main variables
@@ -116,7 +116,7 @@ def mimc_hash(xL_in: str, xR_in: str, k: str) -> tuple:
     xL = int(xL_in)
     xR = int(xR_in)
     k = int(k)
-    
+
     for i in range(NROUNDS):
         c = cts[i]
         t = mimc_add(xL, k) if i == 0 else mimc_add(mimc_add(xL, k), c)

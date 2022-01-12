@@ -9,9 +9,10 @@ client = ContractingClient()
 
 module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'ozark')
 
-VERIFIER_CONTRACT_OPT = 'con_verifier_optimized_v1'
-VERIFIER_CONTRACT = 'con_verifier_v1'
-OZARK_CONTRACT = 'con_ozark_v1'
+VERIFIER_CONTRACT_OPT = 'con_verifier_optimized'
+VERIFIER_CONTRACT_PAIRING = 'con_verifier_opt_pairing'
+CTS_CONTRACT = 'con_mimc_cts'
+OZARK_CONTRACT = 'con_ozark'
 PHI_CONTRACT = 'con_phi_lst001'
 DENOMINATION = 100_000
 
@@ -24,21 +25,28 @@ with open(join(dirname(module_dir), 'core', f'{PHI_CONTRACT}.py'), 'r') as f:
 print(f'Time to submit PHI_CONTRACT: {time.time()-t0}')
 
 t1 = time.time()
-with open(os.path.join(module_dir, f'{VERIFIER_CONTRACT}.py'), 'r') as f:
+with open(os.path.join(module_dir, 'optimized', f'{VERIFIER_CONTRACT_PAIRING}.py'), 'r') as f:
     code = f.read()
-    client.submit(code, name=VERIFIER_CONTRACT, signer='me')
+    client.submit(code, name=VERIFIER_CONTRACT_PAIRING, signer='me')
 
-print(f'Time to submit VERIFIER_CONTRACT: {time.time()-t1}')
+print(f'Time to submit VERIFIER_CONTRACT_PAIRING: {time.time()-t1}')
 
 t1 = time.time()
-with open(os.path.join(module_dir, f'{VERIFIER_CONTRACT_OPT}.py'), 'r') as f:
+with open(os.path.join(module_dir, 'optimized', f'{VERIFIER_CONTRACT_OPT}.py'), 'r') as f:
     code = f.read()
     client.submit(code, name=VERIFIER_CONTRACT_OPT, signer='me')
 
 print(f'Time to submit VERIFIER_CONTRACT_OPT: {time.time()-t1}')
 
 t1 = time.time()
-with open(os.path.join(module_dir, f'{OZARK_CONTRACT}.py'), 'r') as f:
+with open(os.path.join(module_dir, 'optimized', f'{CTS_CONTRACT}.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=CTS_CONTRACT, signer='me')
+
+print(f'Time to submit CTS_CONTRACT: {time.time()-t1}')
+
+t1 = time.time()
+with open(os.path.join(module_dir, 'optimized', f'{OZARK_CONTRACT}.py'), 'r') as f:
     code = f.read()
     client.submit(code, name=OZARK_CONTRACT, signer='me', constructor_args={'token_contract_value': PHI_CONTRACT})
 

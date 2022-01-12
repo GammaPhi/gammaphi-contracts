@@ -1,4 +1,5 @@
-# con_verifier_optimized_v1
+# con_verifier_opt_pairing
+
 pseudo_binary_encoding = [0, 0, 0, 1, 0, 1, 0, -1, 0, 0, 1, -1, 0, 0, 1, 0,
                           0, 1, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 0, 0, 1, 1,
                           1, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, 1,
@@ -6,15 +7,21 @@ pseudo_binary_encoding = [0, 0, 0, 1, 0, 1, 0, -1, 0, 0, 1, -1, 0, 0, 1, 0,
 curve_order = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 p2 = 21888242871839275222246405745257275088696311157297823662689037894645226208583
 u = 4965661367192848881
-xiToPMinus1Over6 = [16469823323077808223889137241176536799009286646108169935659301613961712198316, 8376118865763821496583973867626364092589906065868298776909617916018768340080]
-xiToPMinus1Over3 = [10307601595873709700152284273816112264069230130616436755625194854815875713954, 21575463638280843010398324269430826099269044274347216827212613867836435027261]
-xiToPMinus1Over2 = [3505843767911556378687030309984248845540243509899259641013678093033130930403, 2821565182194536844548159561693502659359617185244120367078079554186484126554]
+xiToPMinus1Over6 = [16469823323077808223889137241176536799009286646108169935659301613961712198316,
+                    8376118865763821496583973867626364092589906065868298776909617916018768340080]
+xiToPMinus1Over3 = [10307601595873709700152284273816112264069230130616436755625194854815875713954,
+                    21575463638280843010398324269430826099269044274347216827212613867836435027261]
+xiToPMinus1Over2 = [3505843767911556378687030309984248845540243509899259641013678093033130930403,
+                    2821565182194536844548159561693502659359617185244120367078079554186484126554]
 xiToPSquaredMinus1Over3 = 21888242871839275220042445260109153167277707414472061641714758635765020556616
 xiTo2PSquaredMinus2Over3 = 2203960485148121921418603742825762020974279258880205651966
 xiToPSquaredMinus1Over6 = 21888242871839275220042445260109153167277707414472061641714758635765020556617
-xiTo2PMinus2Over3 = [19937756971775647987995932169929341994314640652964949448313374472400716661030, 2581911344467009335267311115468803099551665605076196740867805258568234346338]
-twistB = [266929791119991161246907387137283842545076965332900288569378510910307636690, 19485874751759354771024239261021720505790618469301721065564631296452457478373]
+xiTo2PMinus2Over3 = [19937756971775647987995932169929341994314640652964949448313374472400716661030,
+                     2581911344467009335267311115468803099551665605076196740867805258568234346338]
+twistB = [266929791119991161246907387137283842545076965332900288569378510910307636690,
+          19485874751759354771024239261021720505790618469301721065564631296452457478373]
 curveB = 3
+
 
 def FQ(n: int) -> int:
     n = n % p2
@@ -22,28 +29,34 @@ def FQ(n: int) -> int:
         n += p2
     return n
 
+
 def fq_inv(a: int, n: int = p2) -> int:
     if a == 0:
         return 0
     lm, hm = 1, 0
     low, high = a % n, n
     while low > 1:
-        r = high//low
-        nm, new = hm-lm*r, high-low*r
+        r = high // low
+        nm, new = hm - lm * r, high - low * r
         lm, low, hm, high = nm, new, lm, low
     return lm % n
+
 
 def fa(self: int, other: int) -> int:
     return FQ(self + other)
 
+
 def fm(self: int, other: int) -> int:
     return FQ(self * other)
+
 
 def fs(self: int, other: int) -> int:
     return FQ(self - other)
 
+
 def fq_eq(self: int, other: int) -> bool:
     return self == other
+
 
 def fq_neg(self: int) -> int:
     self = -self
@@ -51,44 +64,57 @@ def fq_neg(self: int) -> int:
         self += p2
     return self
 
+
 def bits_of(k):
     return [int(c) for c in "{0:b}".format(k)]
+
 
 def FQ2(coeffs: list) -> list:
     assert len(coeffs) == 2, f'FQ2 must have 2 coefficients but had {len(coeffs)}'
     return coeffs
 
+
 def FQ6(coeffs: list) -> list:
     assert len(coeffs) == 3 and len(coeffs[0]) == 2, 'FQ6 must have 3 FQ2s'
     return coeffs
+
 
 def FQ12(coeffs: list) -> list:
     assert len(coeffs) == 2 and len(coeffs[0]) == 3, 'FQ12 must have 2 FQ6s'
     return coeffs
 
+
 def fq2_one(n: int = 0) -> list:
     return [0, 1]
+
 
 def fq2_zero(n: int = 0) -> list:
     return [0, 0]
 
+
 def fq2_is_one(self: list) -> bool:
     return self[0] == 0 and self[1] == 1
+
 
 def fq2_is_zero(self: list) -> bool:
     return self[0] == 0 and self[1] == 0
 
+
 def fq2_conjugate(self: list) -> list:
     return [fq_neg(self[0]), self[1]]
+
 
 def fq2_neg(self: list) -> list:
     return [fq_neg(self[0]), fq_neg(self[1])]
 
+
 def f2a(self: list, other: list) -> list:
     return [fa(self[0], other[0]), fa(self[1], other[1])]
 
+
 def f2s(self: list, other: list) -> list:
     return [fs(self[0], other[0]), fs(self[1], other[1])]
+
 
 def f2m(self: list, other: list) -> list:
     tx = fm(self[0], other[1])
@@ -100,10 +126,12 @@ def f2m(self: list, other: list) -> list:
     ty = fs(ty, t)
     return [tx, ty]
 
+
 def f2m_scalar(self: list, other: int) -> list:
     x = fm(self[0], other)
     y = fm(self[1], other)
     return [x, y]
+
 
 def f2m_xi(self: list) -> list:
     tx = fa(self[0], self[0])
@@ -119,8 +147,10 @@ def f2m_xi(self: list) -> list:
     ty = fs(ty, self[0])
     return [tx, ty]
 
+
 def fq2_eq(self: list, other: list) -> bool:
     return self[0] == other[0] and self[1] == other[1]
+
 
 def fq2_square(self: list) -> list:
     tx = fs(self[1], self[0])
@@ -130,6 +160,7 @@ def fq2_square(self: list) -> list:
     tx = fm(self[0], self[1])
     tx = fa(tx, tx)
     return [tx, ty]
+
 
 def fq2_invert(self: list) -> list:
     t1 = fm(self[0], self[0])
@@ -141,20 +172,26 @@ def fq2_invert(self: list) -> list:
     y = fm(self[1], inv)
     return [x, y]
 
+
 def fq6_one(n: int = 0) -> list:
     return [fq2_zero(), fq2_zero(), fq2_one()]
+
 
 def fq6_zero(n: int = 0) -> list:
     return [fq2_zero(), fq2_zero(), fq2_zero()]
 
+
 def fq6_is_zero(self: list) -> bool:
     return fq2_is_zero(self[0]) and fq2_is_zero(self[1]) and fq2_is_zero(self[2])
+
 
 def fq6_is_one(self: list) -> bool:
     return fq2_is_zero(self[0]) and fq2_is_zero(self[1]) and fq2_is_one(self[2])
 
+
 def fq6_neg(self: list) -> list:
     return [fq2_neg(self[0]), fq2_neg(self[1]), fq2_neg(self[2])]
+
 
 def fq6_frobenius(self: list) -> list:
     x = fq2_conjugate(self[0])
@@ -164,16 +201,20 @@ def fq6_frobenius(self: list) -> list:
     y = f2m(y, xiToPMinus1Over3)
     return [x, y, z]
 
+
 def fq6_frobenius_p2(self: list) -> list:
     x = f2m_scalar(self[0], xiTo2PSquaredMinus2Over3)
-    y = f2m_scalar(self[1], xiToPSquaredMinus1Over3) 
+    y = f2m_scalar(self[1], xiToPSquaredMinus1Over3)
     return [x, y, self[2]]
+
 
 def f6a(self: list, other: list) -> list:
     return [f2a(self[0], other[0]), f2a(self[1], other[1]), f2a(self[2], other[2])]
 
+
 def f6s(self: list, other: list) -> list:
-    return [f2s(self[0], other[0]), f2s(self[1], other[1]), f2s(self[2], other[2])]    
+    return [f2s(self[0], other[0]), f2s(self[1], other[1]), f2s(self[2], other[2])]
+
 
 def f6m(self: list, other: list) -> list:
     v0 = f2m(self[2], other[2])
@@ -203,16 +244,20 @@ def f6m(self: list, other: list) -> list:
     tx = f2s(tx, v2)
     return [tx, ty, tz]
 
+
 def f6m_scalar(self: list, other: list) -> list:
     return [f2m(self[0], other), f2m(self[1], other), f2m(self[2], other)]
 
+
 def f6m_gfp(self: list, other: int) -> list:
     return [f2m_scalar(self[0], other), f2m_scalar(self[1], other), f2m_scalar(self[2], other)]
+
 
 def f6m_tau(self: list) -> list:
     tz = f2m_xi(self[0])
     ty = self[1]
     return [ty, self[2], tz]
+
 
 def fq6_square(self: list) -> list:
     v0 = fq2_square(self[2])
@@ -240,11 +285,12 @@ def fq6_square(self: list) -> list:
     c2 = f2s(c2, v2)
     return [c2, c1, c0]
 
+
 def fq6_invert(self: list) -> list:
     XX = fq2_square(self[0])
     YY = fq2_square(self[1])
     ZZ = fq2_square(self[2])
-    
+
     XY = f2m(self[0], self[1])
     XZ = f2m(self[0], self[2])
     YZ = f2m(self[1], self[2])
@@ -260,31 +306,39 @@ def fq6_invert(self: list) -> list:
     F = fq2_invert(F)
     return [f2m(C, F), f2m(B, F), f2m(A, F)]
 
+
 def fq12_one(n: int = 0) -> list:
     return [fq6_zero(), fq6_one()]
+
 
 def fq12_is_one(self: list) -> bool:
     return fq6_is_zero(self[0]) and fq6_is_one(self[1])
 
+
 def fq12_conjugate(self: list) -> list:
     return [fq6_neg(self[0]), self[1]]
+
 
 def fq12_frobenius(self: list) -> list:
     x = fq6_frobenius(self[0])
     x = f6m_scalar(x, xiToPMinus1Over6)
     return [x, fq6_frobenius(self[1])]
 
+
 def fq12_frobenius_p2(self: list) -> list:
     x = fq6_frobenius_p2(self[0])
     x = f6m_gfp(x, xiToPSquaredMinus1Over6)
     return [x, fq6_frobenius_p2(self[1])]
 
+
 def f12a(self: list, other: list) -> list:
     return [f6a(self[0], other[0]), f6a(self[1], other[1])]
 
+
 def f12s(self: list, other: list) -> list:
     return [f6s(self[0], other[0]), f6s(self[1], other[1])]
-    
+
+
 def f12m(self: list, other: list) -> list:
     tx = f6m(self[0], other[1])
     t = f6m(self[1], other[0])
@@ -294,18 +348,21 @@ def f12m(self: list, other: list) -> list:
     t = f6m_tau(t)
     return [tx, f6a(ty, t)]
 
+
 def f12m_scalar(self: list, other: list) -> list:
     return [f6m(self[0], other), f6m(self[1], other)]
 
+
 def fq12_exp(self: list, other: int) -> list:
     sum = fq12_one()
-    for i in range(other.bit_length()-1, -1, -1):
+    for i in range(other.bit_length() - 1, -1, -1):
         t = fq12_square(sum)
         if other >> i & 1 != 0:
             sum = f12m(t, self)
         else:
             sum = t
     return sum
+
 
 def fq12_square(self: list) -> list:
     v0 = f6m(self[0], self[1])
@@ -318,6 +375,7 @@ def fq12_square(self: list) -> list:
     ty = f6s(ty, t)
     return [f6a(v0, v0), ty]
 
+
 def fq12_invert(self: list) -> list:
     t1 = fq6_square(self[0])
     t2 = fq6_square(self[1])
@@ -325,6 +383,7 @@ def fq12_invert(self: list) -> list:
     t1 = f6s(t2, t1)
     t2 = fq6_invert(t1)
     return f12m_scalar([fq6_neg(self[0]), self[1]], t2)
+
 
 def line_function_add(r: list, p: list, q: list, r2: list) -> tuple:
     B = f2m(p[0], r[3])
@@ -346,7 +405,7 @@ def line_function_add(r: list, p: list, q: list, r2: list) -> tuple:
     L1 = f2s(L1, r[1])
 
     V = f2m(r[0], E)
-    
+
     rOutX = fq2_square(L1)
     rOutX = f2s(rOutX, J)
     rOutX = f2s(rOutX, f2a(V, V))
@@ -380,6 +439,7 @@ def line_function_add(r: list, p: list, q: list, r2: list) -> tuple:
     b = f2a(b, b)
 
     return a, b, c, [rOutX, rOutY, rOutZ, rOutT]
+
 
 def line_function_double(r: list, q: list) -> tuple:
     A = fq2_square(r[0])
@@ -426,6 +486,7 @@ def line_function_double(r: list, q: list) -> tuple:
     rT = fq2_square(rZ)
     return a, b, c, [rX, rY, rZ, rT]
 
+
 def line_function_mul(ret: list, a: list, b: list, c: list) -> list:
     a2 = [fq2_zero(), a, b]
     a2 = f6m(a2, ret[0])
@@ -443,25 +504,26 @@ def line_function_mul(ret: list, a: list, b: list, c: list) -> list:
     rY = f6a(rY, a2)
     return [rX, rY]
 
+
 def miller(q: list, p: list) -> list:
     ret = fq12_one()
-    
+
     aAffine = twist_make_affine(q)
     bAffine = curve_make_affine(p)
 
     minusA = twist_neg(aAffine)
-    
+
     r = aAffine
     r2 = fq2_square(aAffine[1])
 
-    for i in range(len(pseudo_binary_encoding)-1, 0, -1):
+    for i in range(len(pseudo_binary_encoding) - 1, 0, -1):
         a, b, c, r = line_function_double(r, bAffine)
         if i != len(pseudo_binary_encoding) - 1:
             ret = fq12_square(ret)
 
         ret = line_function_mul(ret, a, b, c)
 
-        s = pseudo_binary_encoding[i-1]
+        s = pseudo_binary_encoding[i - 1]
         if s == 1:
             a, b, c, r = line_function_add(r, aAffine, bAffine, r2)
         elif s == -1:
@@ -475,7 +537,7 @@ def miller(q: list, p: list) -> list:
         f2m(fq2_conjugate(aAffine[0]), xiToPMinus1Over3),
         f2m(fq2_conjugate(aAffine[1]), xiToPMinus1Over2),
         fq2_one(),
-        fq2_one(), 
+        fq2_one(),
     ]
 
     minusQ2 = [
@@ -494,6 +556,7 @@ def miller(q: list, p: list) -> list:
     a, b, c, r = line_function_add(r, minusQ2, bAffine, r2)
     ret = line_function_mul(ret, a, b, c)
     return ret
+
 
 def final_exponentiation(p: list) -> list:
     t1 = fq12_conjugate(p)
@@ -545,6 +608,7 @@ def final_exponentiation(p: list) -> list:
     t0 = f12m(t0, t1)
     return t0
 
+
 def twist_make_affine(c: list) -> list:
     if fq2_is_one(c[2]):
         return c
@@ -565,6 +629,7 @@ def twist_make_affine(c: list) -> list:
             fq2_one(),
             fq2_one(),
         ]
+
 
 def twist_add(a: list, b: list) -> list:
     if twist_is_infinity(a):
@@ -619,6 +684,7 @@ def twist_add(a: list, b: list) -> list:
     cZ = f2m(t4, h)
     return [cX, cY, cZ]
 
+
 def twist_double(a: list) -> list:
     A = f2m(a[0], a[0])
     B = f2m(a[1], a[1])
@@ -639,7 +705,7 @@ def twist_double(a: list) -> list:
 
     cZ = f2m(a[1], a[2])
     cZ = f2a(cZ, cZ)
-    
+
     t = f2a(C, C)
     t2 = f2a(t, t)
     t = f2a(t2, t2)
@@ -647,6 +713,7 @@ def twist_double(a: list) -> list:
     t2 = f2m(e, cY)
     cY = f2s(t2, t)
     return [cX, cY, cZ]
+
 
 def twist_mul(pt: list, k: int) -> list:
     if int(k) == 0:
@@ -656,9 +723,10 @@ def twist_mul(pt: list, k: int) -> list:
          pt]
 
     for kb in bits_of(k):
-        R[kb^1] = twist_add(R[kb], R[kb^1])
+        R[kb ^ 1] = twist_add(R[kb], R[kb ^ 1])
         R[kb] = twist_double(R[kb])
     return R[0]
+
 
 def twist_neg(c: list) -> list:
     return [
@@ -668,8 +736,10 @@ def twist_neg(c: list) -> list:
         fq2_zero(),
     ]
 
+
 def twist_is_infinity(c: list) -> bool:
     return fq2_is_zero(c[2])
+
 
 def twist_is_on_curve(c: list) -> bool:
     c = twist_make_affine(c)
@@ -683,6 +753,7 @@ def twist_is_on_curve(c: list) -> bool:
     y2 = f2s(y2, x3)
     y2 = f2s(y2, twistB)
     return fq2_is_zero(y2)
+
 
 def curve_add(a: list, b: list) -> list:
     if curve_is_infinity(a):
@@ -741,6 +812,7 @@ def curve_add(a: list, b: list) -> list:
     cZ = fm(t4, h)
     return [cX, cY, cZ]
 
+
 def curve_double(a: list) -> list:
     A = fm(a[0], a[0])
     B = fm(a[1], a[1])
@@ -761,7 +833,7 @@ def curve_double(a: list) -> list:
 
     cZ = fm(a[1], a[2])
     cZ = fa(cZ, cZ)
-    
+
     t = fa(C, C)
     t2 = fa(t, t)
     t = fa(t2, t2)
@@ -769,6 +841,7 @@ def curve_double(a: list) -> list:
     t2 = fm(e, cY)
     cY = fs(t2, t)
     return [cX, cY, cZ]
+
 
 def curve_mul(pt: list, k: int) -> list:
     if int(k) == 0:
@@ -778,12 +851,14 @@ def curve_mul(pt: list, k: int) -> list:
          pt]
 
     for kb in bits_of(k):
-        R[kb^1] = curve_add(R[kb], R[kb^1])
+        R[kb ^ 1] = curve_add(R[kb], R[kb ^ 1])
         R[kb] = curve_double(R[kb])
     return R[0]
 
+
 def curve_is_infinity(c: list) -> bool:
     return c[2] == 0
+
 
 def curve_neg(c: list) -> list:
     return [
@@ -792,6 +867,7 @@ def curve_neg(c: list) -> list:
         c[2],
         0,
     ]
+
 
 def curve_make_affine(c: list) -> list:
     if fq_eq(c[2], 1):
@@ -816,16 +892,18 @@ def curve_make_affine(c: list) -> list:
             1,
         ]
 
+
 def curve_is_on_curve(c: list) -> bool:
     c = curve_make_affine(c)
     if curve_is_infinity(c):
         return True
-    
+
     y2 = fm(c[1], c[1])
     x3 = fm(c[0], c[0])
     x3 = fm(x3, c[0])
     x3 = fa(x3, curveB)
     return fq_eq(y2, x3)
+
 
 def pairing(Q: list, P: list) -> list:
     assert curve_is_on_curve(P), f'P is not on the curve.'
@@ -835,81 +913,17 @@ def pairing(Q: list, P: list) -> list:
     r = miller(Q, P)
     return r
 
-vk = {
-    "IC": [[
-            16225148364316337376768119297456868908427925829817748684139175309620217098814,
-            5167268689450204162046084442581051565997733233062478317813755636162413164690,
-            1,1
-        ],[
-            12882377842072682264979317445365303375159828272423495088911985689463022094260,
-            19488215856665173565526758360510125932214252767275816329232454875804474844786,
-            1,1
-        ],[
-            13083492661683431044045992285476184182144099829507350352128615182516530014777,
-            602051281796153692392523702676782023472744522032670801091617246498551238913,
-            1,1
-        ],[
-            9732465972180335629969421513785602934706096902316483580882842789662669212890,
-            2776526698606888434074200384264824461688198384989521091253289776235602495678,
-            1,1
-        ],[
-            8586364274534577154894611080234048648883781955345622578531233113180532234842,
-            21276134929883121123323359450658320820075698490666870487450985603988214349407,
-            1,1
-        ],[
-            4910628533171597675018724709631788948355422829499855033965018665300386637884,
-            20532468890024084510431799098097081600480376127870299142189696620752500664302,
-            1,1
-        ],[
-            15335858102289947642505450692012116222827233918185150176888641903531542034017,
-            5311597067667671581646709998171703828965875677637292315055030353779531404812,
-            1,1
-        ]
-    ],"vk_alfa_1": [
-        20692898189092739278193869274495556617788530808486270118371701516666252877969,
-        11713062878292653967971378194351968039596396853904572879488166084231740557279,
-        1,1
-    ],"vk_beta_2": [
-        [12168528810181263706895252315640534818222943348193302139358377162645029937006,281120578337195720357474965979947690431622127986816839208576358024608803542],
-        [16129176515713072042442734839012966563817890688785805090011011570989315559913,9011703453772030375124466642203641636825223906145908770308724549646909480510],
-        [0,1],
-        [0,1]
-    ],"vk_gamma_2": [
-        [11559732032986387107991004021392285783925812861821192530917403151452391805634,10857046999023057135944570762232829481370756359578518086990519993285655852781],
-        [4082367875863433681332203403145435568316851327593401208105741076214120093531,8495653923123431417604973247489272438418190587263600148770280649306958101930],
-        [0,1],
-        [0,1]
-    ],"vk_delta_2": [
-        [21280594949518992153305586783242820682644996932183186320680800072133486887432,150879136433974552800030963899771162647715069685890547489132178314736470662],
-        [1081836006956609894549771334721413187913047383331561601606260283167615953295,11434086686358152335540554643130007307617078324975981257823476472104616196090],
-        [0,1],
-        [0,1]
-    ]
-}
-
-def verify(
-    inputs: list, 
-    proof: dict) -> int:
-    IC = vk['IC']
-    assert len(inputs) + 1 == len(IC), "verifier-bad-input"
-    # Compute the linear combination vk_x
+@export
+def compute_vk(IC: list, inputs: list) -> list:
     vk_x = IC[0]
     for i in range(len(inputs)):
         assert inputs[i] < curve_order, "verifier-gte-snark-scalar-field"
-        vk_x = curve_add(vk_x, curve_mul(IC[i+1], inputs[i]))
+        vk_x = curve_add(vk_x, curve_mul(IC[i + 1], inputs[i]))
+    return vk_x
 
-    p = [
-        curve_neg(proof['A']),
-        vk['vk_alfa_1'],
-        vk_x,
-        proof['C']
-    ]
-    q = [
-        (proof['B'][0], proof['B'][1], proof['B'][2], proof['B'][3]),
-        vk['vk_beta_2'],
-        vk['vk_gamma_2'],
-        vk['vk_delta_2']
-    ]
+@export
+def final_result(p: list, q: list) -> int:
+    p[0] = curve_neg(p[0])
 
     x = fq12_one()
     for i in range(4):
@@ -917,29 +931,7 @@ def verify(
             continue
         x = f12m(x, pairing(q[i], p[i]))
 
-    x = final_exponentiation(x)    
+    x = final_exponentiation(x)
     if not fq12_is_one(x):
         return 1
     return 0
-
-@export
-def verify_proof(
-    a: list,
-    b: list,
-    c: list,
-    inputs: list
-) -> bool:
-    proof = {}
-    proof['A'] = (int(a[0]), int(a[1]), int(a[2]), 1)
-    proof['B'] = (
-        FQ2([int(b[0][1]), int(b[0][0])]), 
-        FQ2([int(b[1][1]), int(b[1][0])]),
-        FQ2([int(b[2][1]), int(b[2][0])]),
-        fq2_one()
-    )
-    proof['C'] = (int(c[0]), int(c[1]), int(c[2]), 1)
-    inputs = [int(i) for i in inputs]
-    if verify(inputs, proof) == 0:
-        return True
-    else:
-        return False
