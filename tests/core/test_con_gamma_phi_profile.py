@@ -10,7 +10,7 @@ client = ContractingClient()
 
 module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'profile')
 
-PROFILE_CONTRACT = 'con_gamma_phi_profile_v4'
+PROFILE_CONTRACT = 'con_gamma_phi_profile_v5'
 PROFILE_IMPL_CONTRACT = 'con_gamma_phi_profile_impl_v1'
 CHANNEL_IMPL_CONTRACT = 'con_gamma_phi_channel_impl_v1'
 RSA_CONTRACT = 'con_rsa_encryption'

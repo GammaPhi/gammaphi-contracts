@@ -1,12 +1,12 @@
-# con_ozark
+# con_private_command
 
 import con_verifier_optimized as verifier
 import con_mimc_cts as mimc_cts
+import currency as tau
 I = importlib
 
 # Main variables
 denomination = Variable()
-token_contract = Variable()
 total_deposit_balance = Variable()
 
 # Merkle Tree Variables
@@ -23,7 +23,7 @@ TREE_LEVELS = 20
 
 
 @construct
-def init(denomination_value: int = 100_000, token_contract_value: str = 'currency'):
+def init(denomination_value: int = 100_000):
     assert TREE_LEVELS > 0, 'tree_levels should be greater than zero'
     assert TREE_LEVELS < 32, 'tree_levels should be less than 32'
     filled_subtrees = []
@@ -33,7 +33,7 @@ def init(denomination_value: int = 100_000, token_contract_value: str = 'currenc
         filled_subtrees.append(str(zeros(i)))
 
     roots[0] = str(zeros(TREE_LEVELS - 1))
-    
+
     # Set variables
     current_root_index.set(0)
     next_index.set(0)
@@ -42,7 +42,6 @@ def init(denomination_value: int = 100_000, token_contract_value: str = 'currenc
 
     total_deposit_balance.set(0)
     denomination.set(denomination_value)
-    token_contract.set(token_contract_value)
 
 
 @export
@@ -56,8 +55,7 @@ def deposit(commitment: str):
 
 def process_deposit(caller: str):
     amount = denomination.get()
-    token = I.import_module(token_contract.get())
-    token.transfer_from(
+    tau.transfer_from(
         to=ctx.this,
         amount=amount,
         main_account=caller
@@ -65,18 +63,54 @@ def process_deposit(caller: str):
     total_deposit_balance.set(total_deposit_balance.get() + amount)
 
 
+def mimc_sponge_pre_hash_helper(obj: Any) -> str:
+    if obj is None:
+        return 'None'
+    elif isinstance(obj, dict):
+        data = []
+        for key in sorted(obj.keys()):
+            data.append(f'{key}={mimc_sponge_pre_hash_helper(obj[key])}')
+        data_str = ','.join(data)
+        return "{"+data_str+"}"
+    elif isinstance(obj, list):
+        obj = [mimc_sponge_pre_hash_helper(x) for x in obj]
+        return "[" + ",".join(obj) + "]"
+    else:
+        return str(obj)
+
+
 @export
-def withdraw(a: list, b: list, c: list, root: str, nullifier_hash: str, recipient: str, relayer: str = '0',
-             fee: str = '0', refund: str = '0'):
+def run_command(a: list, 
+                b: list, 
+                c: list, 
+                root: str, 
+                nullifier_hash: str, 
+                command_hash: str, 
+                command: dict,
+                relayer: str = '0',
+                fee: str = '0', 
+                refund: str = '0'):
+    assert 'contract' in command, 'Please specify a contract in your command.'
+    assert 'action' in command, 'Please specify a action in your command.'
+    assert 'payload' in command, 'Please specify a payload object in your command.'
     assert int(fee) < denomination.get(), 'Fee exceeds transfer value.'
     assert nullifier_hashes[nullifier_hash] is None, 'The note has already been spent.'
     assert is_known_root(root), 'Cannot find your merkle root.'
+    # Check command hash
+    data_str = mimc_sponge_pre_hash_helper(command)
+    data_int = int(data_str.encode('utf-8').hex(), 16) % curve_order
+    data_hash = mimc_multi_hash(
+        arr=[data_int],
+        cts=mimc_cts.get_cts(),
+    )[0]
+    #assert data_hash == command_hash, 'Invalid command hash'
+    # Verify proof
     assert verifier.verify_proof(
         a=a, b=b, c=c,
         inputs=[
             int(root, 10),
             int(nullifier_hash, 10),
-            int(recipient, 16),
+            int(command_hash, 16),
             int(relayer, 16),
             int(fee, 10),
             int(refund, 10),
@@ -84,22 +118,23 @@ def withdraw(a: list, b: list, c: list, root: str, nullifier_hash: str, recipien
     ), 'Invalid withdraw proof.'
 
     nullifier_hashes[nullifier_hash] = True
-    process_withdraw(recipient, relayer, int(fee, 10), int(refund, 10))
+    process_command(command, relayer, int(fee, 10), int(refund, 10))
 
 
-def process_withdraw(recipient: str, relayer: str, fee: int, refund: int):
+def process_command(command: dict, relayer: str, fee: int, refund: int):
     assert refund == 0, 'Refund not supported.'
 
     amount = denomination.get() - fee
     assert amount > 0, 'Nothing to withdraw.'
 
-    token = I.import_module(token_contract.get())
-    token.transfer(
-        to=recipient,
-        amount=amount
-    )
+    contract = I.import_module(command['contract'])
+    action = command['action']
+    payload = command['payload']
+    method = getattr(contract, action)
+    method(**payload)
+
     if fee > 0:
-        token.transfer(
+        tau.transfer(
             to=relayer,
             amount=fee
         )

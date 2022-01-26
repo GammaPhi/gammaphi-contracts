@@ -11,10 +11,24 @@ module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'ozark')
 
 VERIFIER_CONTRACT_OPT = 'con_verifier_optimized'
 VERIFIER_CONTRACT_PAIRING = 'con_verifier_opt_pairing'
+PRIVATE_COMMAND_OPT = 'con_private_command'
 CTS_CONTRACT = 'con_mimc_cts'
 OZARK_CONTRACT = 'con_ozark'
+CURRENCY_CONTRACT = 'currency'
 PHI_CONTRACT = 'con_phi_lst001'
 DENOMINATION = 100_000
+
+PROFILE_CONTRACT = 'con_gamma_phi_profile_v5'
+PROFILE_IMPL_CONTRACT = 'con_gamma_phi_profile_impl_v1'
+
+
+with open(os.path.join(dirname(module_dir), 'profile', f'{PROFILE_CONTRACT}.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=PROFILE_CONTRACT, signer='me')
+
+with open(os.path.join(dirname(module_dir), 'profile', f'{PROFILE_IMPL_CONTRACT}.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=PROFILE_IMPL_CONTRACT, owner=PROFILE_CONTRACT, signer='me')
 
 t0 = time.time()
 
@@ -23,6 +37,14 @@ with open(join(dirname(module_dir), 'core', f'{PHI_CONTRACT}.py'), 'r') as f:
     client.submit(code, name=PHI_CONTRACT, signer='me')
 
 print(f'Time to submit PHI_CONTRACT: {time.time()-t0}')
+
+
+t1 = time.time()
+with open(join(dirname(module_dir), 'common', f'{CURRENCY_CONTRACT}.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=CURRENCY_CONTRACT, signer='me')
+
+print(f'Time to submit CURRENCY_CONTRACT: {time.time()-t1}')
 
 t1 = time.time()
 with open(os.path.join(module_dir, 'optimized', f'{VERIFIER_CONTRACT_PAIRING}.py'), 'r') as f:
@@ -52,7 +74,19 @@ with open(os.path.join(module_dir, 'optimized', f'{OZARK_CONTRACT}.py'), 'r') as
 
 print(f'Time to submit OZARK_CONTRACT: {time.time()-t1}')
 
+t1 = time.time()
+with open(os.path.join(module_dir, 'optimized', f'{PRIVATE_COMMAND_OPT}.py'), 'r') as f:
+    code = f.read()
+    client.submit(code, name=PRIVATE_COMMAND_OPT, signer='me')
+
+print(f'Time to submit PRIVATE_COMMAND_OPT: {time.time()-t1}')
+
 print(f'Time to submit contracts: {time.time()-t0}')
+
+client.signer = 'me'
+contract = client.get_contract(PROFILE_CONTRACT)
+contract.register_action(action='profile', contract=PROFILE_IMPL_CONTRACT)
+
 
 def get_contract_for_signer(contract: str, signer: str):
     client.signer = signer
@@ -215,6 +249,105 @@ class MyTestCase(unittest.TestCase):
         )
         recipient_balance_after = phi.quick_read('balances', recipient)
         self.assertEqual(recipient_balance_after, denomination)
+
+    def test_run_command(self):
+        contract = get_contract_for_signer(PRIVATE_COMMAND_OPT, 'me')
+
+        print_merkle_tree_state(contract)
+        denomination = contract.quick_read('denomination')
+        self.assertEqual(denomination, DENOMINATION)
+
+        tau = get_contract_for_signer('currency', 'me')
+
+        t0 = time.time()
+        tau.approve(
+            amount=denomination,
+            to=PRIVATE_COMMAND_OPT
+        )
+        print(f'Time to approve PHI: {time.time()-t0}')
+        roots = contract.quick_read('roots_var')
+        self.assertIsNone(roots[1])
+        self.assertIsNotNone(roots[0])
+
+        my_balance = tau.quick_read('balances', 'me')
+
+        t0 = time.time()
+        contract.deposit(
+            commitment=str(int('0x1950ebe4d7216447872e8ede2bb68231db6efb3d7a7095fec917ea845817374f', 16)) 
+        )
+        print(f'Time to deposit TAU: {time.time()-t0}')
+
+        my_balance_after = tau.quick_read('balances', 'me')
+        self.assertEqual(my_balance_after, my_balance - denomination)
+        
+
+        roots = contract.quick_read('roots_var')
+        self.assertIsNotNone(roots[1])
+        self.assertIsNotNone(roots[0])
+
+        print_merkle_tree_state(contract)
+
+        contract = get_contract_for_signer(PRIVATE_COMMAND_OPT, 'you')
+
+        # Correct proof
+        recipient = '3af8c271423e93586837f5c53b776bb231d062f477a474f57f3cfc24e8d776'
+        proof_data = { 'pi_a':
+        [ '13774734694806893345431794156356514571363079254825067879443184821206447822750',
+            '5209428786776521202856824112990553528771784326411286192918798384107382954954',
+            '1' ],
+        'pi_b':
+        [ [ '5173078677927959662734785177277144661908479282203617744477925437547277462997',
+            '5008919259924401514229994859356982028735024574680767144772652733435392622987' ],
+            [ '16237021846884756770715728474067652062799669637447076030779615223774369289462',
+            '2712062232854900554770345916314277164381058075864652478551356549239494502978' ],
+            [ '1', '0' ] ],
+        'pi_c':
+        [ '11709473128502841396551378248174338037383283271432381215788718530577500746586',
+            '4008944338641772649658914022116044050220759783362908976331068335514955377268',
+            '1' ],
+        'publicSignals':
+        [ '19472974227534089877661842339747066589074924514634613071633204486088526229164',
+            '18099330611372391564551405916666174527872771719801289262717800528837024370849',
+            recipient,
+            '0',
+            '0',
+            '0' ] }
+
+        a = proof_data['pi_a']
+        b = proof_data['pi_b']
+        c = proof_data['pi_c']
+
+        inputs = proof_data['publicSignals']
+
+        contract = get_contract_for_signer(PRIVATE_COMMAND_OPT, 'you')
+
+        t0 = time.time()
+        command = {
+            'action': 'interact',
+            'contract': PROFILE_CONTRACT,
+            'payload': {
+                'action': 'profile',
+                'payload': {
+                    'action': 'create_profile',
+                    'username': 'test123'
+                }
+            }
+        }
+        contract.run_command(
+            a=a,
+            b=b,
+            c=c,
+            root=inputs[0],
+            nullifier_hash=inputs[1],
+            command_hash=inputs[2],
+            command=command,
+            relayer=inputs[3],
+            fee=inputs[4],
+            refund=inputs[5]
+        )
+        print(f'Time to run command: {time.time()-t0}')
+        # Check stuff # TODO
+
 
 
 if __name__ == '__main__':
