@@ -47,8 +47,8 @@ def init():
     settings[REQUIRED_STAKE_VALIDATE_EVENT_STR] = 50_000_000
     settings[FEE_PERCENT_STR] = 0.01
     settings[TIE_FEE_PERCENT_STR] = 0.005
-    settings[EVENT_CREATOR_FEE_PERCENT_STR] = 0.3
-    settings[EVENT_VALIDATOR_FEE_PERCENT_STR] = 0.3
+    settings[EVENT_CREATOR_FEE_PERCENT_STR] = 0.1
+    settings[EVENT_VALIDATOR_FEE_PERCENT_STR] = 0.5
     settings[RESERVE_FEE_PERCENT_STR] = 0.4
     settings[BURN_FEE_PERCENT_STR] = 0.0
     settings[TRUSTED_EVENT_CREATORS_STR] = []
@@ -141,8 +141,10 @@ def add_event(metadata: dict, wager: dict, timestamp: int, caller: str, state: A
     assert isinstance(options, list), 'Options must be a list.'
     for option_id in range(len(options)):
         assert isinstance(options[option_id], str), 'Each option must be a string.'
-    # TODO validate metadata
-    assert 'name' in metadata, 'Name must be present in metadata.'
+    assert 'away_team' in metadata, 'away_team must be present in metadata.'
+    assert 'home_team' in metadata, 'home_team must be present in metadata.'
+    assert 'sport' in metadata, 'sport must be present in metadata.'
+    assert 'date' in metadata, 'date must be present in metadata.'
     total_num_events.set(event_id + 1)
 
 
