@@ -103,7 +103,6 @@ def validate_event(event_id: int, winning_option_id: int, caller: str, state: An
     events[event_id, 'validated_time'] = now
 
 
-
 def add_event(metadata: dict, wager: dict, timestamp: int, caller: str, state: Any) -> str:
     # Event details
     '''
@@ -161,6 +160,12 @@ def place_bet(event_id: int, option_id: int, amount: float, caller: str, state: 
     bets[event_id, caller] += amount
     bets[event_id, option_id] += amount
     bets[event_id, option_id, caller] += amount
+    # Store bet so we can retrieve from a UI
+    num_bets = bets[caller, 'num_bets'] or 0
+    bets[caller, 'bet', num_bets] = event_id   
+    num_bets += 1
+    bets[caller, 'num_bets'] = num_bets
+
 
 
 def claim_bet(event_id: int, option_id: int, caller: str, state: Any):
