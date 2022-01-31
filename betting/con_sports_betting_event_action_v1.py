@@ -18,11 +18,10 @@ bets = Hash(default_value=0)
 
 # Constants
 MAIN_CONTRACT = 'con_sports_betting'
-CLAIM_HOLDING_PERIOD_DAYS_STR = 'claim_holding_duration'
+CLAIM_HOLDING_PERIOD_DAYS_STR = 'holding_duration'
 REQUIRED_DISPUTE_APPROVAL_PERCENTAGE_STR = 'required_dispute_approval_percentage'
 DISPUTE_DURATION_DAYS_STR = 'min_dispute_duration'
 MINIMUM_DISPUTE_QUORUM_STR = 'min_dispute_quorum'
-MAX_DISPUTE_DURATION_DAYS_STR = 'max_dispute_duration'
 REQUIRED_STAKE_ADD_EVENT_STR = 'add_event_stake'
 REQUIRED_STAKE_VALIDATE_EVENT_STR = 'validate_event_stake'
 TIE_FEE_PERCENT_STR = 'fie_tie'
@@ -31,7 +30,6 @@ EVENT_CREATOR_FEE_PERCENT_STR = 'creator_fee'
 EVENT_VALIDATOR_FEE_PERCENT_STR = 'validator_fee'
 RESERVE_FEE_PERCENT_STR = 'reserve_fee'
 BURN_FEE_PERCENT_STR = 'burn_fee'
-TRUSTED_EVENT_CREATORS_STR = 'trusted_creators'
 TRUSTED_EVENT_VALIDATORS_STR = 'trusted_validators'
 BURN_ADDRESS_STR = 'burn_address'
 
@@ -43,7 +41,7 @@ parent_settings = ForeignHash(foreign_contract=MAIN_CONTRACT, foreign_name='sett
 
 @construct
 def init():
-    settings[REQUIRED_STAKE_ADD_EVENT_STR] = 5_000_000
+    settings[REQUIRED_STAKE_ADD_EVENT_STR] = 0
     settings[REQUIRED_STAKE_VALIDATE_EVENT_STR] = 50_000_000
     settings[FEE_PERCENT_STR] = 0.01
     settings[TIE_FEE_PERCENT_STR] = 0.005
@@ -51,7 +49,6 @@ def init():
     settings[EVENT_VALIDATOR_FEE_PERCENT_STR] = 0.5
     settings[RESERVE_FEE_PERCENT_STR] = 0.4
     settings[BURN_FEE_PERCENT_STR] = 0.0
-    settings[TRUSTED_EVENT_CREATORS_STR] = []
     settings[TRUSTED_EVENT_VALIDATORS_STR] = []
     settings[BURN_ADDRESS_STR] = 'x00BURN00x'
     total_num_events.set(0)
@@ -60,8 +57,6 @@ def init():
     settings[MINIMUM_DISPUTE_QUORUM_STR] = 0.2
     settings[REQUIRED_DISPUTE_APPROVAL_PERCENTAGE_STR] = 0.5
     settings[CLAIM_HOLDING_PERIOD_DAYS_STR] = 1
-    # gives just under (MAX_DISPUTE_DURATION_DAYS_STR-DISPUTE_DURATION_DAYS_STR) days to file a dispute
-    settings[MAX_DISPUTE_DURATION_DAYS_STR] = 3 
     dispute_id.set(0)
 
 
@@ -124,8 +119,7 @@ def add_event(metadata: dict, wager: dict, timestamp: int, caller: str, state: A
         }]
     }
     '''
-    assert stakes[caller] >= get_setting_helper(REQUIRED_STAKE_ADD_EVENT_STR), 'Not enough stake.'
-    assert caller in get_setting_helper(TRUSTED_EVENT_CREATORS_STR), 'You are not a trusted event creator.'
+    assert (stakes[caller] or 0) >= get_setting_helper(REQUIRED_STAKE_ADD_EVENT_STR), 'Not enough stake.'
     assert timestamp > get_current_time(), 'Timestamp is in the past.'
     event_id = total_num_events.get()
     events[event_id, 'metadata'] = metadata
@@ -144,6 +138,8 @@ def add_event(metadata: dict, wager: dict, timestamp: int, caller: str, state: A
     assert 'home_team' in metadata, 'home_team must be present in metadata.'
     assert 'sport' in metadata, 'sport must be present in metadata.'
     assert 'date' in metadata, 'date must be present in metadata.'
+    assert events[metadata['sport'], metadata['away_team'], metadata['home_team'], metadata['date']] is None, 'This event has already been created.'
+    events[metadata['sport'], metadata['away_team'], metadata['home_team'], metadata['date']] = event_id
     total_num_events.set(event_id + 1)
 
 
@@ -178,6 +174,7 @@ def claim_bet(event_id: int, option_id: int, caller: str, state: Any):
     assert (validated_time + datetime.timedelta(days=get_setting_helper(CLAIM_HOLDING_PERIOD_DAYS_STR))) <= now, "Holding period not over!"
     is_tie = bets[event_id, 'tie']
     assert is_tie or bets[event_id, option_id, 'win'], 'You did not win this bet.'
+    assert events[event_id, 'dispute'] is None, 'This event is under dispute.'
     if is_tie:        
         fee = amount * get_setting_helper(TIE_FEE_PERCENT_STR)
         payout = (amount - fee)
@@ -205,23 +202,29 @@ def claim_bet(event_id: int, option_id: int, caller: str, state: Any):
 # Disputes
 def create_dispute(event_id: int, current_option_id: int, expected_option_id: int, description: str, caller: str, state: Any):
     assert current_option_id != expected_option_id, 'These cannot be the same.'
-    assert events[event_id, 'validator'] is not None, 'This has not been validated yet.'
+    validated_time = events[event_id, 'validated_time']
+    assert validated_time is not None, 'Validation has not occurred yet.'
     if current_option_id == -1:
         assert bets[event_id, 'tie'], 'This was not a tie.'
     else:
         assert bets[event_id, current_option_id, 'win'], 'This was not the result.'    
     amount = bets[event_id, caller]
     assert amount > 0, 'No amount in this wager.'
+    assert (validated_time + datetime.timedelta(days=get_setting_helper(CLAIM_HOLDING_PERIOD_DAYS_STR))) > now, "Holding period is over!"
     p_id = dispute_id.get()
     dispute_id.set(p_id + 1)
     dispute_details[p_id, 'event_id'] = event_id
     dispute_details[p_id, "current_option_id"] = current_option_id
     dispute_details[p_id, "expected_option_id"] = expected_option_id
     modify_dispute(p_id, description, get_setting_helper(DISPUTE_DURATION_DAYS_STR))
+    assert events[event_id, 'dispute'] is None, 'This event has already been disputed.'
+    events[event_id, 'dispute'] = p_id
     return p_id
 
 
 def vote_dispute(p_id: int, result: bool, caller: str, state: Any): #Vote here
+    assert dispute_details[p_id, 'event_id'] is not None, 'This is not a valid dispute.'
+    assert finished_disputes[p_id] is not True, "Proposal already resolved" #Checks that the proposal has not been resolved before (to prevent double spends)
     dispute_sigs[p_id, caller] = result
     voters = dispute_details[p_id, "voters"] or []
     voters.append(caller)
@@ -233,7 +236,7 @@ def determine_dispute_results(p_id: int, caller: str, state: Any): #Vote resolut
     assert finished_disputes[p_id] is not True, "Proposal already resolved" #Checks that the proposal has not been resolved before (to prevent double spends)
     assert p_id < dispute_id.get()
     event_id = dispute_details[p_id, 'event_id']
-    assert (events[event_id, 'validated_time'] + datetime.timedelta(days=1) * (get_setting_helper(MAX_DISPUTE_DURATION_DAYS_STR))) >= now, "Dispute took too long!" #Checks if proposal has concluded
+    assert (events[event_id, 'validated_time'] + datetime.timedelta(days=1) * (get_setting_helper(CLAIM_HOLDING_PERIOD_DAYS_STR))) >= now, "Dispute took too long!" #Checks if proposal has concluded
     finished_disputes[p_id] = True #Adds the proposal to the list of resolved proposals
     approvals = 0
     total_votes = 0
@@ -245,7 +248,9 @@ def determine_dispute_results(p_id: int, caller: str, state: Any): #Vote resolut
             approvals += votes
         total_votes += votes
     quorum = bets[event_id] # Total in wager
+    events[event_id, 'dispute'] = None # Ends dispute and allows users to claim their bets
     if approvals < (quorum * get_setting_helper(MINIMUM_DISPUTE_QUORUM_STR)): #Checks that the minimum approval percentage has been reached (quorum)
+        dispute_status[p_id] = False
         return False
     if approvals / total_votes >= get_setting_helper(REQUIRED_DISPUTE_APPROVAL_PERCENTAGE_STR): #Checks that the approval percentage of the votes has been reached (% of total votes)
         # Change result
@@ -292,35 +297,29 @@ def handle_fees(event_id: int, total_fee: float, caller: str, state: Any):
     fee_for_reserve = total_fee * get_setting_helper(RESERVE_FEE_PERCENT_STR)
     fee_for_burn = total_fee * get_setting_helper(BURN_FEE_PERCENT_STR)
     assert (fee_for_burn + fee_for_event_creator + fee_for_event_validator + fee_for_reserve) == total_fee, 'Invalid fee percentages.'
-    token = I.import_module(get_setting_helper(state['TOKEN_CONTRACT_STR'])))
+    token = I.import_module(get_setting_helper(state['TOKEN_CONTRACT_STR']))
     if fee_for_event_creator > 0:
         creator = events[event_id, 'creator']
-        if creator != caller:
-            token.transfer_from(
-                to=events[event_id, 'creator'],
-                amount=fee_for_event_creator,
-                main_account=caller,
-            )
+        token.transfer(
+            to=creator,
+            amount=fee_for_event_creator,
+        )
     if fee_for_event_validator > 0:
         validator = events[event_id, 'validator']
-        if validator != caller:
-            token.transfer_from(
-                to=validator,
-                amount=fee_for_event_validator,
-                main_account=caller,
-            )
+        token.transfer(
+            to=validator,
+            amount=fee_for_event_validator,
+        )
     if fee_for_reserve > 0:
         reserve_balance.set(reserve_balance.get() + fee_for_reserve)
-        token.transfer_from(
+        token.transfer(
             to=ctx.owner,
             amount=fee_for_event_validator,
-            main_account=caller,
         )
     if fee_for_burn > 0:
-        token.transfer_from(
+        token.transfer(
             to=get_setting_helper(BURN_ADDRESS_STR),
             amount=fee_for_burn,
-            main_account=caller,
         )
 
 

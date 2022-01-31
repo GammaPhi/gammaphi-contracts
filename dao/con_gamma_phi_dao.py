@@ -58,7 +58,7 @@ def init(token_contract: str = 'con_phi_lst001'):
     settings[OWNER_STR] = ctx.caller
     settings[TOKEN_CONTRACT_STR] = token_contract
 
-    settings[STAKING_LOCKUP_DAYS_STR] = 14
+    settings[STAKING_LOCKUP_DAYS_STR] = 21
     reserve_balance.set(0)
     total_staked.set(0)
     contracts_list.set([])
@@ -144,21 +144,20 @@ def bulk_interact_internal(action: str, payloads: list, caller: str):
 
 @export # Safe to export
 def bulk_interact(action: str, payloads: list):
-    for payload in payloads:
-        interact(action, payload)
+    bulk_interact_internal(action, payloads, ctx.caller)
 
 
 @export
 def force_change_setting(key: str, value: Any, to_float: bool = False):
     assert ctx.caller == settings[OWNER_STR], 'Only the owner can directly change settings.'
     if to_float:
-        value = float(value)
+        value = decimal(value)
     settings[key] = value
 
 
 @export
 def stake(amount: float):
-    assert amount > 0, 'Must be positive.'
+    assert amount >= 0, 'Must be non-negative.'
     current_amount = stakes[ctx.caller] or 0
     if current_amount > amount:
         # unstake
@@ -251,7 +250,7 @@ def create_change_setting_proposal(setting: str, value: Any, voting_time_in_days
     p_id = proposal_id.get()
     proposal_id.set(p_id + 1)
     if to_float:
-        value = float(value)
+        value = decimal(value)
     proposal_details[p_id, "setting"] = setting
     proposal_details[p_id, "value"] = value
     proposal_details[p_id, "type"] = "change_setting"
@@ -294,7 +293,7 @@ def vote(p_id: int, result: bool): #Vote here
 
 
 @export
-def determine_results(p_id: int): #Vote resolution takes place here
+def determine_results(p_id: int) -> bool: #Vote resolution takes place here
     assert (proposal_details[p_id, "time"] + datetime.timedelta(days=1) * (proposal_details[p_id, "duration"])) <= now, "Proposal not over!" #Checks if proposal has concluded
     assert finished_proposals[p_id] is not True, "Proposal already resolved" #Checks that the proposal has not been resolved before (to prevent double spends)
     assert p_id < proposal_id.get()
@@ -308,6 +307,7 @@ def determine_results(p_id: int): #Vote resolution takes place here
         total_votes += stake
     quorum = total_staked.get()
     if approvals < (quorum * settings[MINIMUM_QUORUM_STR]): #Checks that the minimum approval percentage has been reached (quorum)
+        status[p_id] = False
         return False
     if approvals / total_votes >= settings[REQUIRED_APPROVAL_PERCENTAGE_STR]: #Checks that the approval percentage of the votes has been reached (% of total votes)
         if proposal_details[p_id, "type"] == "transfer": 
