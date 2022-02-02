@@ -120,6 +120,25 @@ def unregister_action(action: str):
     actions[action] = None
 
 
+@export
+def force_register_action(action: str, contract: str):
+    assert ctx.caller == settings[OWNER_STR], 'Only the owner can directly call this method.'
+    register_action(action, contract)
+
+
+@export
+def force_override_actionn(action: str, contract: str):
+    assert ctx.caller == settings[OWNER_STR], 'Only the owner can directly call this method.'
+    override_action(action, contract)
+
+
+@export
+def force_unregister_action(action: str):
+    assert ctx.caller == settings[OWNER_STR], 'Only the owner can directly call this method.'
+    unregister_action(action)
+
+
+
 # Do not export this one
 def interact_internal(action: str, payload: dict, caller: str) -> Any:
     contract = actions[action]

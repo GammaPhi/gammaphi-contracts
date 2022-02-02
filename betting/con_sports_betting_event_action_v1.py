@@ -128,18 +128,36 @@ def add_event(metadata: dict, wager: dict, timestamp: int, caller: str, state: A
     events[event_id, 'creator'] = caller
     events[event_id, 'wager'] = wager
     # validate wager
-    assert 'name' in wager, 'Each wager must have a name.'        
-    assert 'options' in wager, 'Each wager must have a list of options.'
-    options = wager['options']
-    assert isinstance(options, list), 'Options must be a list.'
-    for option_id in range(len(options)):
-        assert isinstance(options[option_id], str), 'Each option must be a string.'
-    assert 'away_team' in metadata, 'away_team must be present in metadata.'
-    assert 'home_team' in metadata, 'home_team must be present in metadata.'
-    assert 'sport' in metadata, 'sport must be present in metadata.'
-    assert 'date' in metadata, 'date must be present in metadata.'
-    assert events[metadata['sport'], metadata['away_team'], metadata['home_team'], metadata['date']] is None, 'This event has already been created.'
-    events[metadata['sport'], metadata['away_team'], metadata['home_team'], metadata['date']] = event_id
+    wager_type = wager.get('name')
+    wager_options = wager.get('options')
+    assert wager_type is not None, 'Each wager must have a name.'        
+    assert wager_options is not None, 'Each wager must have a list of options.'
+    assert isinstance(wager_options, list), 'Options must be a list.'
+    for option_id in range(len(wager_options)):
+        assert isinstance(wager_options[option_id], str), 'Each option must be a string.'
+    away_team = metadata.get('away_team')
+    home_team = metadata.get('home_team')
+    sport = metadata.get('sport')
+    date = metadata.get('date')
+    assert away_team is not None, 'away_team must be present in metadata.'
+    assert home_team is not None, 'home_team must be present in metadata.'
+    assert sport is not None, 'sport must be present in metadata.'
+    assert date is not None, 'date must be present in metadata.'
+    event_data = [sport, away_team, home_team, date, wager_type]
+    event_data.extend(wager_options)
+    if wager_type == 'spread':
+        spread = wager.get('spread')
+        assert spread is not None, 'Spread wager must have a spread.'
+        event_data.append(str(spread))
+    elif wager_type == 'total':
+        total = wager.get('total')
+        assert total is not None, 'Total wager must have a total.'
+        event_data.append(str(total))
+    else:
+        assert wager_type == 'moneyline', f'Invalid wager type: {wager_type}.'
+    event_hash = hashlib.sha256(','.join(event_data))
+    assert events[event_hash] is None, 'This event has already been created.'
+    events[event_hash] = event_id
     total_num_events.set(event_id + 1)
 
 
@@ -175,7 +193,10 @@ def claim_bet(event_id: int, option_id: int, caller: str, state: Any):
     is_tie = bets[event_id, 'tie']
     assert is_tie or bets[event_id, option_id, 'win'], 'You did not win this bet.'
     assert events[event_id, 'dispute'] is None, 'This event is under dispute.'
-    if is_tie:        
+    # Check if only no other options were bet on
+    amount_in_option = bets[event_id, option_id]
+    amount_in_wager = bets[event_id]
+    if is_tie or amount_in_option == amount_in_wager:        
         fee = amount * get_setting_helper(TIE_FEE_PERCENT_STR)
         payout = (amount - fee)
         handle_fees(event_id, fee, caller, state)
