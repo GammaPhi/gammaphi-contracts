@@ -17,7 +17,7 @@ bets = Hash(default_value=0)
 
 
 # Constants
-MAIN_CONTRACT = 'con_sports_betting'
+MAIN_CONTRACT = 'con_gamma_phi_dao'
 CLAIM_HOLDING_PERIOD_DAYS_STR = 'holding_duration'
 REQUIRED_DISPUTE_APPROVAL_PERCENTAGE_STR = 'required_dispute_approval_percentage'
 DISPUTE_DURATION_DAYS_STR = 'min_dispute_duration'
@@ -99,26 +99,6 @@ def validate_event(event_id: int, winning_option_id: int, caller: str, state: An
 
 
 def add_event(metadata: dict, wager: dict, timestamp: int, caller: str, state: Any) -> str:
-    # Event details
-    '''
-    {
-        metadata: {
-            name: 'Serena Williams v Naomi Osaka',            
-            sport: 'Tennis',
-            season: '2022',
-            venue: 'Australian Open',
-            description: 'Tennis / Australian Open 2022',
-            league: 'WTA',
-            tournament: 'Australian Open 2022',
-            ... other
-        }
-        timestamp: int(time.time()),
-        wagers: [{
-            name: 'Moneyline',
-            options: ['Serena Williams', 'Naomi Osaka']
-        }]
-    }
-    '''
     assert (stakes[caller] or 0) >= get_setting_helper(REQUIRED_STAKE_ADD_EVENT_STR), 'Not enough stake.'
     assert timestamp > get_current_time(), 'Timestamp is in the past.'
     event_id = total_num_events.get()
@@ -196,10 +176,10 @@ def claim_bet(event_id: int, option_id: int, caller: str, state: Any):
     # Check if only no other options were bet on
     amount_in_option = bets[event_id, option_id]
     amount_in_wager = bets[event_id]
+    fee = 0
     if is_tie or amount_in_option == amount_in_wager:        
         fee = amount * get_setting_helper(TIE_FEE_PERCENT_STR)
         payout = (amount - fee)
-        handle_fees(event_id, fee, caller, state)
     else:        
         wager_total = bets[event_id]
         option_total = bets[event_id, option_id]
@@ -211,7 +191,9 @@ def claim_bet(event_id: int, option_id: int, caller: str, state: Any):
             winnings = amount * ratio
             fee = winnings * get_setting_helper(FEE_PERCENT_STR)
             payout += (winnings - fee)
-            handle_fees(event_id, fee, caller, state)
+    if fee > 0:
+        handle_fees(event_id, fee, caller, state)
+    assert payout + fee <= amount_in_wager, f'Invalid fee. Fee + payout = {payout+fee}'
     I.import_module(get_setting_helper(state['TOKEN_CONTRACT_STR'])).transfer(
         to=caller,
         amount=payout
@@ -335,7 +317,7 @@ def handle_fees(event_id: int, total_fee: float, caller: str, state: Any):
         reserve_balance.set(reserve_balance.get() + fee_for_reserve)
         token.transfer(
             to=ctx.owner,
-            amount=fee_for_event_validator,
+            amount=fee_for_reserve,
         )
     if fee_for_burn > 0:
         token.transfer(
