@@ -1,5 +1,6 @@
 # con_sports_betting_event_action_v1
 # owner: con_sports_betting
+import currency as tau
 I = importlib
 
 # State
@@ -29,9 +30,7 @@ FEE_PERCENT_STR = 'fee'
 EVENT_CREATOR_FEE_PERCENT_STR = 'creator_fee'
 EVENT_VALIDATOR_FEE_PERCENT_STR = 'validator_fee'
 RESERVE_FEE_PERCENT_STR = 'reserve_fee'
-BURN_FEE_PERCENT_STR = 'burn_fee'
 TRUSTED_EVENT_VALIDATORS_STR = 'trusted_validators'
-BURN_ADDRESS_STR = 'burn_address'
 
 
 # State from parent contract
@@ -48,9 +47,7 @@ def init():
     settings[EVENT_CREATOR_FEE_PERCENT_STR] = 0.1
     settings[EVENT_VALIDATOR_FEE_PERCENT_STR] = 0.5
     settings[RESERVE_FEE_PERCENT_STR] = 0.4
-    settings[BURN_FEE_PERCENT_STR] = 0.0
     settings[TRUSTED_EVENT_VALIDATORS_STR] = []
-    settings[BURN_ADDRESS_STR] = 'x00BURN00x'
     total_num_events.set(0)
     # Disputes
     settings[DISPUTE_DURATION_DAYS_STR] = 1
@@ -80,6 +77,8 @@ def interact(payload: dict, state: Any, caller: str) -> Any:
         return vote_dispute(**kwargs)
     elif function == 'determine_dispute_result':
         return determine_dispute_results(**kwargs)
+    elif function == 'emergency_withdraw':
+        return emergency_withdraw(**kwargs)
     else:
         assert False, f'Invalid function: {function}'
 
@@ -145,7 +144,7 @@ def place_bet(event_id: int, option_id: int, amount: float, caller: str, state: 
     assert amount > 0, 'Must be positive.'
     assert events[event_id, 'live'], 'This event is not live.'
     assert events[event_id, 'timestamp'] > get_current_time(), 'Event has already started.'
-    I.import_module(get_setting_helper(state['TOKEN_CONTRACT_STR'])).transfer_from(
+    tau.transfer_from(
         to=ctx.this,
         amount=amount,
         main_account=caller
@@ -194,7 +193,7 @@ def claim_bet(event_id: int, option_id: int, caller: str, state: Any):
     if fee > 0:
         handle_fees(event_id, fee, caller, state)
     assert payout + fee <= amount_in_wager, f'Invalid fee. Fee + payout = {payout+fee}'
-    I.import_module(get_setting_helper(state['TOKEN_CONTRACT_STR'])).transfer(
+    tau.transfer(
         to=caller,
         amount=payout
     )
@@ -219,7 +218,7 @@ def create_dispute(event_id: int, current_option_id: int, expected_option_id: in
     dispute_details[p_id, 'event_id'] = event_id
     dispute_details[p_id, "current_option_id"] = current_option_id
     dispute_details[p_id, "expected_option_id"] = expected_option_id
-    modify_dispute(p_id, description, get_setting_helper(DISPUTE_DURATION_DAYS_STR))
+    modify_dispute(p_id, description, get_setting_helper(DISPUTE_DURATION_DAYS_STR), caller)
     assert events[event_id, 'dispute'] is None, 'This event has already been disputed.'
     events[event_id, 'dispute'] = p_id
     return p_id
@@ -230,6 +229,7 @@ def vote_dispute(p_id: int, result: bool, caller: str, state: Any): #Vote here
     assert finished_disputes[p_id] is not True, "Proposal already resolved" #Checks that the proposal has not been resolved before (to prevent double spends)
     dispute_sigs[p_id, caller] = result
     voters = dispute_details[p_id, "voters"] or []
+    assert caller not in voters, 'You have already voted.'
     voters.append(caller)
     dispute_details[p_id, "voters"] = voters
 
@@ -280,7 +280,7 @@ def determine_dispute_results(p_id: int, caller: str, state: Any): #Vote resolut
 
 
 # Helpers
-def modify_dispute(p_id: int, description: str, voting_time_in_days: int):
+def modify_dispute(p_id: int, description: str, voting_time_in_days: int, caller: str):
     dispute_details[p_id, "dispute_creator"] = caller
     dispute_details[p_id, "description"] = description
     dispute_details[p_id, "time"] = now
@@ -294,36 +294,33 @@ def get_current_time():
 
 
 def handle_fees(event_id: int, total_fee: float, caller: str, state: Any):
-    reserve_balance = state['reserve_balance']
     fee_for_event_creator = total_fee * get_setting_helper(EVENT_CREATOR_FEE_PERCENT_STR)
     fee_for_event_validator = total_fee * get_setting_helper(EVENT_VALIDATOR_FEE_PERCENT_STR)
     fee_for_reserve = total_fee * get_setting_helper(RESERVE_FEE_PERCENT_STR)
-    fee_for_burn = total_fee * get_setting_helper(BURN_FEE_PERCENT_STR)
-    assert (fee_for_burn + fee_for_event_creator + fee_for_event_validator + fee_for_reserve) == total_fee, 'Invalid fee percentages.'
-    token = I.import_module(get_setting_helper(state['TOKEN_CONTRACT_STR']))
+    assert (fee_for_event_creator + fee_for_event_validator + fee_for_reserve) == total_fee, 'Invalid fee percentages.'
     if fee_for_event_creator > 0:
         creator = events[event_id, 'creator']
-        token.transfer(
+        tau.transfer(
             to=creator,
             amount=fee_for_event_creator,
         )
     if fee_for_event_validator > 0:
         validator = events[event_id, 'validator']
-        token.transfer(
+        tau.transfer(
             to=validator,
             amount=fee_for_event_validator,
         )
     if fee_for_reserve > 0:
-        reserve_balance.set(reserve_balance.get() + fee_for_reserve)
-        token.transfer(
+        tau.transfer(
             to=ctx.owner,
             amount=fee_for_reserve,
         )
-    if fee_for_burn > 0:
-        token.transfer(
-            to=get_setting_helper(BURN_ADDRESS_STR),
-            amount=fee_for_burn,
-        )
+
+
+def emergency_withdraw(amount: float, caller: str, state: Any):
+    owner = get_setting_helper(state['OWNER_STR'])
+    assert caller == owner, 'Only the owner can call this method.'
+    tau.transfer(to=ctx.owner, amount=amount)
 
 
 def get_setting_helper(setting: str) -> Any:

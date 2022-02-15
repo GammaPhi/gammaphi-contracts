@@ -7,7 +7,6 @@ I = importlib
 # State
 settings = Hash(default_value=None)
 stakes = Hash(default_value=0)
-reserve_balance = Variable()
 total_staked = Variable()
 
 
@@ -35,7 +34,6 @@ state = {
     'stakes': stakes, # should this be read only?
     'settings': settings, # should this be read only?
     'metadata': metadata,
-    'reserve_balance': reserve_balance,
     'total_staked': total_staked,
     'TOKEN_CONTRACT_STR': TOKEN_CONTRACT_STR,
     'OWNER_STR': OWNER_STR,
@@ -59,7 +57,6 @@ def init(token_contract: str = 'con_phi_lst001'):
     settings[TOKEN_CONTRACT_STR] = token_contract
 
     settings[STAKING_LOCKUP_DAYS_STR] = 21
-    reserve_balance.set(0)
     total_staked.set(0)
     contracts_list.set([])
 
@@ -307,6 +304,7 @@ def create_approval_proposal(token_contract: str, amount: float, to: str, descri
 def vote(p_id: int, result: bool): #Vote here
     sig[p_id, ctx.caller] = result
     voters = proposal_details[p_id, "voters"] or []
+    assert ctx.caller not in voters, 'You have already voted.'
     voters.append(ctx.caller)
     proposal_details[p_id, "voters"] = voters
 

@@ -17,7 +17,6 @@ CURRENCY_CONTRACT = 'currency'
 PHI_CONTRACT = 'con_phi_lst001'
 SPORTS_BETTING_ACTION = 'sports_betting'
 VALIDATOR_STAKE = 50_000_000
-BURN_ADDRESS = 'x00BURN00x'
 ME = 'my-address'
 USER_1 = 'user-1'
 USER_2 = 'user-2'
@@ -104,6 +103,7 @@ phi.approve(
     amount=VALIDATOR_STAKE,
     to=DAO_CONTRACT
 )
+tau = get_currency_contract_for_signer(ME)
 dao = get_dao_contract_for_signer(ME)
 dao.stake(amount=VALIDATOR_STAKE)
 dao.force_change_setting(key='trusted_validators', value=[ME])
@@ -113,6 +113,10 @@ sports = get_betting_contract_for_signer(ME)
 for i in range(1, 6):
     user = globals()[f'USER_{i}']
     phi.transfer(
+        amount=1_000_000,
+        to=user
+    )
+    tau.transfer(
         amount=1_000_000,
         to=user
     )
@@ -149,7 +153,7 @@ class TestDao(unittest.TestCase):
         self.assertEqual(USER_1, sports.quick_read('events', event_id, ['creator']))
 
         # Place bets
-        get_phi_contract_for_signer(USER_1).approve(
+        get_currency_contract_for_signer(USER_1).approve(
             amount=1_000,
             to=SPORTS_BETTING_CONTRACT
         )
@@ -171,9 +175,9 @@ class TestDao(unittest.TestCase):
         self.assertEqual(1_000, sports.quick_read('bets', event_id, [1]))
         self.assertEqual(1_000, sports.quick_read('bets', event_id, [USER_1]))
         self.assertEqual(1_000, sports.quick_read('bets', event_id))
-        self.assertEqual(1_000, phi.quick_read('balances', SPORTS_BETTING_CONTRACT))
+        self.assertEqual(1_000, tau.quick_read('balances', SPORTS_BETTING_CONTRACT))
 
-        get_phi_contract_for_signer(USER_2).approve(
+        get_currency_contract_for_signer(USER_2).approve(
             amount=2_000,
             to=SPORTS_BETTING_CONTRACT
         )
@@ -192,7 +196,7 @@ class TestDao(unittest.TestCase):
         self.assertEqual(1_000, sports.quick_read('bets', event_id, [1]))
         self.assertEqual(1_000, sports.quick_read('bets', event_id, [USER_1]))
         self.assertEqual(2_000, sports.quick_read('bets', event_id, [USER_2]))
-        self.assertEqual(3_000, phi.quick_read('balances', SPORTS_BETTING_CONTRACT))
+        self.assertEqual(3_000, tau.quick_read('balances', SPORTS_BETTING_CONTRACT))
 
         # Validate
         interact(
@@ -208,11 +212,9 @@ class TestDao(unittest.TestCase):
 
 
         # Claim bets
-        previous_reserve_balance = dao.quick_read('reserve_balance')
-        previous_dao_phi_balance = phi.quick_read('balances', DAO_CONTRACT) or 0
-        previous_validator_balance = phi.quick_read('balances', ME) or 0
-        previous_burned_balance = phi.quick_read('balances', BURN_ADDRESS) or 0
-        previous_user_1_balance = phi.quick_read('balances', USER_1) or 0
+        previous_dao_balance = tau.quick_read('balances', DAO_CONTRACT) or 0
+        previous_validator_balance = tau.quick_read('balances', ME) or 0
+        previous_user_1_balance = tau.quick_read('balances', USER_1) or 0
         interact(
             USER_1,
             "claim_bet",
@@ -222,21 +224,16 @@ class TestDao(unittest.TestCase):
             },
             now=datetime.today() + timedelta(days=3)
         )
-        current_reserve_balance = dao.quick_read('reserve_balance')
-        current_dao_phi_balance = phi.quick_read('balances', DAO_CONTRACT) or 0
-        current_validator_balance = phi.quick_read('balances', ME) or 0
-        current_burned_balance = phi.quick_read('balances', BURN_ADDRESS) or 0
-        current_user_1_balance = float(phi.quick_read('balances', USER_1) or 0)
+        current_dao_phi_balance = tau.quick_read('balances', DAO_CONTRACT) or 0
+        current_validator_balance = tau.quick_read('balances', ME) or 0
+        current_user_1_balance = float(tau.quick_read('balances', USER_1) or 0)
         winnings = 2_000
         expected_reserve_fee = winnings * 0.004
         expected_validator_fee = winnings * 0.005
         expected_creator_fee = winnings * 0.001
-        expected_burn_fee = winnings * 0.00
-        total_expected_fees = (expected_reserve_fee + expected_burn_fee + expected_creator_fee + expected_validator_fee)
-        self.assertEqual(previous_reserve_balance + expected_reserve_fee, current_reserve_balance)
-        self.assertEqual(previous_dao_phi_balance + expected_reserve_fee, current_dao_phi_balance)
+        total_expected_fees = (expected_reserve_fee + expected_creator_fee + expected_validator_fee)
+        self.assertEqual(previous_dao_balance + expected_reserve_fee, current_dao_phi_balance)
         self.assertEqual(previous_validator_balance + expected_validator_fee, current_validator_balance)
-        self.assertEqual(previous_burned_balance + expected_burn_fee, current_burned_balance)
         self.assertEqual(previous_user_1_balance + 1_000 + winnings - total_expected_fees + expected_creator_fee, current_user_1_balance)
 
         
