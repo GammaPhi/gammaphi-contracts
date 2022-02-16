@@ -18,14 +18,12 @@ bets = Hash(default_value=0)
 
 
 # Constants
-MAIN_CONTRACT = 'con_gamma_phi_dao'
 CLAIM_HOLDING_PERIOD_DAYS_STR = 'holding_duration'
 REQUIRED_DISPUTE_APPROVAL_PERCENTAGE_STR = 'required_dispute_approval_percentage'
 DISPUTE_DURATION_DAYS_STR = 'min_dispute_duration'
 MINIMUM_DISPUTE_QUORUM_STR = 'min_dispute_quorum'
 REQUIRED_STAKE_ADD_EVENT_STR = 'add_event_stake'
 REQUIRED_STAKE_VALIDATE_EVENT_STR = 'validate_event_stake'
-TIE_FEE_PERCENT_STR = 'fie_tie'
 FEE_PERCENT_STR = 'fee'
 EVENT_CREATOR_FEE_PERCENT_STR = 'creator_fee'
 EVENT_VALIDATOR_FEE_PERCENT_STR = 'validator_fee'
@@ -33,17 +31,11 @@ RESERVE_FEE_PERCENT_STR = 'reserve_fee'
 TRUSTED_EVENT_VALIDATORS_STR = 'trusted_validators'
 
 
-# State from parent contract
-stakes = ForeignHash(foreign_contract=MAIN_CONTRACT, foreign_name='stakes')
-parent_settings = ForeignHash(foreign_contract=MAIN_CONTRACT, foreign_name='settings')
-
-
 @construct
 def init():
     settings[REQUIRED_STAKE_ADD_EVENT_STR] = 0
     settings[REQUIRED_STAKE_VALIDATE_EVENT_STR] = 50_000_000
     settings[FEE_PERCENT_STR] = 0.01
-    settings[TIE_FEE_PERCENT_STR] = 0.005
     settings[EVENT_CREATOR_FEE_PERCENT_STR] = 0.1
     settings[EVENT_VALIDATOR_FEE_PERCENT_STR] = 0.5
     settings[RESERVE_FEE_PERCENT_STR] = 0.4
@@ -75,7 +67,7 @@ def interact(payload: dict, state: Any, caller: str) -> Any:
         return create_dispute(**kwargs)
     elif function == 'vote_dispute':
         return vote_dispute(**kwargs)
-    elif function == 'determine_dispute_result':
+    elif function == 'determine_dispute_results':
         return determine_dispute_results(**kwargs)
     elif function == 'emergency_withdraw':
         return emergency_withdraw(**kwargs)
@@ -84,6 +76,7 @@ def interact(payload: dict, state: Any, caller: str) -> Any:
 
 
 def validate_event(event_id: int, winning_option_id: int, caller: str, state: Any):
+    stakes = ForeignHash(foreign_contract=ctx.owner, foreign_name='stakes')
     assert stakes[caller] >= get_setting_helper(REQUIRED_STAKE_VALIDATE_EVENT_STR), 'Not enough stake.'
     assert caller in get_setting_helper(TRUSTED_EVENT_VALIDATORS_STR), 'You are not a trusted validator.'
     assert events[event_id, 'validator'] is None, 'This event has already been validated.'
@@ -98,6 +91,7 @@ def validate_event(event_id: int, winning_option_id: int, caller: str, state: An
 
 
 def add_event(metadata: dict, wager: dict, timestamp: int, caller: str, state: Any) -> str:
+    stakes = ForeignHash(foreign_contract=ctx.owner, foreign_name='stakes')
     assert (stakes[caller] or 0) >= get_setting_helper(REQUIRED_STAKE_ADD_EVENT_STR), 'Not enough stake.'
     assert timestamp > get_current_time(), 'Timestamp is in the past.'
     event_id = total_num_events.get()
@@ -176,27 +170,31 @@ def claim_bet(event_id: int, option_id: int, caller: str, state: Any):
     amount_in_option = bets[event_id, option_id]
     amount_in_wager = bets[event_id]
     fee = 0
+    payout = amount # Initial bet amount
     if is_tie or amount_in_option == amount_in_wager:        
-        fee = amount * get_setting_helper(TIE_FEE_PERCENT_STR)
-        payout = (amount - fee)
-    else:        
+        # Tie or null bet
+        pass
+    else:
+        # Calculate winnings
         wager_total = bets[event_id]
         option_total = bets[event_id, option_id]
         other_options_total = wager_total - option_total
-        payout = amount # Initial bet amount
         if other_options_total > 0:
             # Plus winnings
             ratio = other_options_total / option_total
             winnings = amount * ratio
-            fee = winnings * get_setting_helper(FEE_PERCENT_STR)
-            payout += (winnings - fee)
+            payout += winnings
+    # Calculate fee
+    fee = payout * get_setting_helper(FEE_PERCENT_STR)
+    payout = (payout - fee)
     if fee > 0:
         handle_fees(event_id, fee, caller, state)
     assert payout + fee <= amount_in_wager, f'Invalid fee. Fee + payout = {payout+fee}'
-    tau.transfer(
-        to=caller,
-        amount=payout
-    )
+    if payout > 0:
+        tau.transfer(
+            to=caller,
+            amount=payout
+        )
     # Prevent reclaiming
     bets[event_id, option_id, caller] = 0
 
@@ -243,6 +241,7 @@ def determine_dispute_results(p_id: int, caller: str, state: Any): #Vote resolut
     finished_disputes[p_id] = True #Adds the proposal to the list of resolved proposals
     approvals = 0
     total_votes = 0
+    stakes = ForeignHash(foreign_contract=ctx.owner, foreign_name='stakes')
     for x in dispute_details[p_id, "voters"]:
         wagered = bets[event_id, x] or 0
         staked = stakes[x] or 0
@@ -317,6 +316,7 @@ def handle_fees(event_id: int, total_fee: float, caller: str, state: Any):
         )
 
 
+# Withdraws funds back to the parent (DAO) contract
 def emergency_withdraw(amount: float, caller: str, state: Any):
     owner = get_setting_helper(state['OWNER_STR'])
     assert caller == owner, 'Only the owner can call this method.'
@@ -326,6 +326,8 @@ def emergency_withdraw(amount: float, caller: str, state: Any):
 def get_setting_helper(setting: str) -> Any:
     # Helper function that will prioritize the parent setters 
     # This makes it easier for the DAO to update settings in this child contract
+    # State from parent contract
+    parent_settings = ForeignHash(foreign_contract=ctx.owner, foreign_name='settings')
     return parent_settings[setting] or settings[setting]
 
 

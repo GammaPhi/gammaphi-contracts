@@ -87,7 +87,7 @@ def to_datetime(d) -> Datetime:
 
 def interact(signer, function, kwargs, now=datetime.today()):
     dao = get_dao_contract_for_signer(signer)
-    dao.interact(
+    return dao.interact(
         action=SPORTS_BETTING_ACTION,
         payload=dict(
             function=function,
@@ -158,6 +158,7 @@ class TestDao(unittest.TestCase):
             to=SPORTS_BETTING_CONTRACT
         )
         num_bets_before = sports.quick_read('bets', USER_1, ['num_bets']) or 0
+        balance_before = tau.quick_read('balances', SPORTS_BETTING_CONTRACT) or 0
         interact(
             USER_1,
             function='place_bet',
@@ -175,7 +176,7 @@ class TestDao(unittest.TestCase):
         self.assertEqual(1_000, sports.quick_read('bets', event_id, [1]))
         self.assertEqual(1_000, sports.quick_read('bets', event_id, [USER_1]))
         self.assertEqual(1_000, sports.quick_read('bets', event_id))
-        self.assertEqual(1_000, tau.quick_read('balances', SPORTS_BETTING_CONTRACT))
+        self.assertEqual(balance_before + 1_000, tau.quick_read('balances', SPORTS_BETTING_CONTRACT))
 
         get_currency_contract_for_signer(USER_2).approve(
             amount=2_000,
@@ -196,7 +197,7 @@ class TestDao(unittest.TestCase):
         self.assertEqual(1_000, sports.quick_read('bets', event_id, [1]))
         self.assertEqual(1_000, sports.quick_read('bets', event_id, [USER_1]))
         self.assertEqual(2_000, sports.quick_read('bets', event_id, [USER_2]))
-        self.assertEqual(3_000, tau.quick_read('balances', SPORTS_BETTING_CONTRACT))
+        self.assertEqual(balance_before + 3_000, tau.quick_read('balances', SPORTS_BETTING_CONTRACT))
 
         # Validate
         interact(
@@ -227,18 +228,215 @@ class TestDao(unittest.TestCase):
         current_dao_phi_balance = tau.quick_read('balances', DAO_CONTRACT) or 0
         current_validator_balance = tau.quick_read('balances', ME) or 0
         current_user_1_balance = float(tau.quick_read('balances', USER_1) or 0)
-        winnings = 2_000
-        expected_reserve_fee = winnings * 0.004
-        expected_validator_fee = winnings * 0.005
-        expected_creator_fee = winnings * 0.001
+        amount_in_pot = 3_000
+        expected_reserve_fee = amount_in_pot * 0.004
+        expected_validator_fee = amount_in_pot * 0.005
+        expected_creator_fee = amount_in_pot * 0.001
         total_expected_fees = (expected_reserve_fee + expected_creator_fee + expected_validator_fee)
         self.assertEqual(previous_dao_balance + expected_reserve_fee, current_dao_phi_balance)
         self.assertEqual(previous_validator_balance + expected_validator_fee, current_validator_balance)
-        self.assertEqual(previous_user_1_balance + 1_000 + winnings - total_expected_fees + expected_creator_fee, current_user_1_balance)
+        self.assertEqual(previous_user_1_balance + amount_in_pot - total_expected_fees + expected_creator_fee, current_user_1_balance)
+
+        self.assertEqual(tau.quick_read('balances', SPORTS_BETTING_CONTRACT) or 0, 0)
+        tau.transfer(amount=1, to=SPORTS_BETTING_CONTRACT)
+        self.assertEqual(tau.quick_read('balances', SPORTS_BETTING_CONTRACT) or 0, 1)
+        self.assertRaises(
+            AssertionError,
+            interact,
+            USER_1,
+            "emergency_withdraw",
+            kwargs={
+                'amount': 1,
+            },
+            now=datetime.today()
+        )
+        interact(
+            ME,
+            "emergency_withdraw",
+            kwargs={
+                'amount': 1,
+            },
+            now=datetime.today()
+        )
+        self.assertEqual(tau.quick_read('balances', SPORTS_BETTING_CONTRACT) or 0, 0)
 
         
     def test_dispute(self):
-        pass # TODO
+        timestamp = int(time.time())
+        date = str(datetime.today())
+        event_id = sports.quick_read('total_num_events')
+        metadata =  {
+            'sport': 'Tennis',
+            'away_team': 'Venus',
+            'home_team': 'Serena',
+            'date': date
+        }
+
+        # Create event
+        interact(
+            USER_1,
+            function='add_event',
+            kwargs={
+                'metadata': metadata,
+                'wager': {
+                    'name': 'moneyline',
+                    'options': ['Venus', 'Serena', 'Tie']
+                }, 'timestamp': timestamp
+            },
+            now=datetime.today() - timedelta(days=3)
+        )
+        # Place bets
+        get_currency_contract_for_signer(USER_1).approve(
+            amount=1_000,
+            to=SPORTS_BETTING_CONTRACT
+        )
+        interact(
+            USER_1,
+            function='place_bet',
+            kwargs={
+                'event_id': event_id,
+                'option_id': 1,
+                'amount': 1_000
+            },
+            now=datetime.today() - timedelta(days=3)
+        )
+        get_currency_contract_for_signer(USER_2).approve(
+            amount=2_000,
+            to=SPORTS_BETTING_CONTRACT
+        )
+        interact(
+            USER_2,
+            function='place_bet',
+            kwargs={
+                'event_id': event_id,
+                'option_id': 0,
+                'amount': 2_000
+            },
+            now=datetime.today() - timedelta(days=3)
+        )
+
+        # Validate
+        interact(
+            ME,
+            "validate_event",
+            kwargs={
+                'event_id': event_id,
+                'winning_option_id': 1,
+            },
+            now=datetime.today() + timedelta(days=1)
+        )
+
+        # Dispute
+        self.assertRaises(
+            AssertionError,
+            interact,
+            USER_1,
+            "create_dispute",
+            kwargs={
+                'event_id': event_id,
+                'current_option_id': 1,
+                'expected_option_id': 0,
+                'description': 'Should be option 0.'
+            },
+            now=datetime.today() + timedelta(days=3) # Too far in future
+        )
+        # Dispute
+        proposal_id = interact(
+            USER_1,
+            "create_dispute",
+            kwargs={
+                'event_id': event_id,
+                'current_option_id': 1,
+                'expected_option_id': 0,
+                'description': 'Should be option 0.'
+            },
+            now=datetime.today() + timedelta(days=1) # Within period
+        )
+        self.assertIsNotNone(proposal_id)
+
+        # Claim bet should fail
+        self.assertRaises( # Under dispute
+            AssertionError,
+            interact,
+            USER_1,
+            "claim_bet",
+            kwargs={
+                'event_id': event_id,
+                'option_id': 1,
+            },
+            now=datetime.today() + timedelta(days=3)
+        )
+        
+        # Handle dispute
+        interact(
+            ME,
+            "vote_dispute",
+            kwargs={
+                'p_id': proposal_id,
+                'result': True
+            },
+            now=datetime.today() + timedelta(days=1)
+        )
+        interact(
+            USER_1,
+            "vote_dispute",
+            kwargs={
+                'p_id': proposal_id,
+                'result': True
+            },
+            now=datetime.today() + timedelta(days=1)
+        )
+        interact(
+            USER_2,
+            "vote_dispute",
+            kwargs={
+                'p_id': proposal_id,
+                'result': True
+            },
+            now=datetime.today() + timedelta(days=1)
+        )
+
+        # Determine results
+        self.assertRaises(
+            AssertionError,
+            interact,
+            USER_1,
+            "determine_dispute_results",
+            kwargs={
+                'p_id': proposal_id,
+            },
+            now=datetime.today() + timedelta(days=1) # Too soon
+        )
+        interact(
+            USER_1,
+            "determine_dispute_results",
+            kwargs={
+                'p_id': proposal_id,
+            },
+            now=datetime.today() + timedelta(days=2)
+        )
+
+        # Claim after dispute
+        self.assertRaises(
+            AssertionError,
+            interact,
+            USER_1, # User 1 no longer won
+            "claim_bet",
+            kwargs={
+                'event_id': event_id,
+                'option_id': 1,
+            },
+            now=datetime.today() + timedelta(days=2)
+        )
+        interact(
+            USER_2,
+            "claim_bet",
+            kwargs={
+                'event_id': event_id,
+                'option_id': 0,
+            },
+            now=datetime.today() + timedelta(days=2)
+        )
   
 if __name__ == '__main__':
     unittest.main()
