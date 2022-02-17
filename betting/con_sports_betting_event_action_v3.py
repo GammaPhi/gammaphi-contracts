@@ -184,12 +184,10 @@ def claim_bet(event_id: int, option_id: int, caller: str, state: Any):
         pass
     else:
         # Calculate winnings
-        wager_total = bets[event_id]
-        option_total = bets[event_id, option_id]
-        other_options_total = wager_total - option_total
+        other_options_total = amount_in_wager - amount_in_option
         if other_options_total > 0:
             # Plus winnings
-            ratio = other_options_total / option_total
+            ratio = other_options_total / amount_in_option
             winnings = amount * ratio
             payout += winnings
     # Calculate fee
