@@ -11,7 +11,7 @@ client = ContractingClient()
 
 module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'dao')
 
-DAO_CONTRACT = 'con_gamma_phi_dao'
+DAO_CONTRACT = 'con_gamma_phi_dao_v1'
 SPORTS_BETTING_CONTRACT = 'con_sports_betting_event_action_v1'
 CURRENCY_CONTRACT = 'currency'
 PHI_CONTRACT = 'con_phi_lst001'
@@ -406,6 +406,16 @@ class TestDao(unittest.TestCase):
                 'p_id': proposal_id,
             },
             now=datetime.today() + timedelta(days=1) # Too soon
+        )
+        self.assertRaises(
+            AssertionError,
+            interact,
+            USER_1,
+            "determine_dispute_results",
+            kwargs={
+                'p_id': proposal_id,
+            },
+            now=datetime.today() + timedelta(days=1) # Too late
         )
         interact(
             USER_1,

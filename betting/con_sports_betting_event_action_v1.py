@@ -1,5 +1,5 @@
 # con_sports_betting_event_action_v1
-# owner: con_sports_betting
+# owner: con_gamma_phi_dao_v1
 import currency as tau
 I = importlib
 
@@ -29,6 +29,7 @@ EVENT_CREATOR_FEE_PERCENT_STR = 'creator_fee'
 EVENT_VALIDATOR_FEE_PERCENT_STR = 'validator_fee'
 RESERVE_FEE_PERCENT_STR = 'reserve_fee'
 TRUSTED_EVENT_VALIDATORS_STR = 'trusted_validators'
+MIN_BET_STR = 'min_bet'
 
 
 @construct
@@ -40,6 +41,7 @@ def init():
     settings[EVENT_VALIDATOR_FEE_PERCENT_STR] = 0.5
     settings[RESERVE_FEE_PERCENT_STR] = 0.4
     settings[TRUSTED_EVENT_VALIDATORS_STR] = []
+    settings[MIN_BET_STR] = 1
     total_num_events.set(0)
     # Disputes
     settings[DISPUTE_DURATION_DAYS_STR] = 1
@@ -136,6 +138,7 @@ def add_event(metadata: dict, wager: dict, timestamp: int, caller: str, state: A
 
 def place_bet(event_id: int, option_id: int, amount: float, caller: str, state: Any):
     assert amount > 0, 'Must be positive.'
+    assert amount >= get_setting_helper(MIN_BET_STR), 'Bet too small.'
     assert events[event_id, 'live'], 'This event is not live.'
     assert events[event_id, 'timestamp'] > get_current_time(), 'Event has already started.'
     tau.transfer_from(

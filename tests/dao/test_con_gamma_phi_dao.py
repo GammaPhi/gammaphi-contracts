@@ -11,7 +11,7 @@ client = ContractingClient()
 
 module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'dao')
 
-DAO_CONTRACT = 'con_gamma_phi_dao'
+DAO_CONTRACT = 'con_gamma_phi_dao_v1'
 CURRENCY_CONTRACT = 'currency'
 PHI_CONTRACT = 'con_phi_lst001'
 

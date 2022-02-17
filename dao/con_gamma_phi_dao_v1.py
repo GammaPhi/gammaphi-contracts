@@ -1,4 +1,4 @@
-# con_sports_betting
+# con_gamma_phi_dao_v1
 
 # Imports
 I = importlib
@@ -124,7 +124,7 @@ def force_register_action(action: str, contract: str):
 
 
 @export
-def force_override_actionn(action: str, contract: str):
+def force_override_action(action: str, contract: str):
     assert ctx.caller == settings[OWNER_STR], 'Only the owner can directly call this method.'
     override_action(action, contract)
 
@@ -169,6 +169,28 @@ def force_change_setting(key: str, value: Any, to_float: bool = False):
     if to_float:
         value = decimal(value)
     settings[key] = value
+
+
+def transfer(token_contract: str, amount: float, to: str):
+    t_c = I.import_module(token_contract)
+    t_c.transfer(amount=amount, to=to)
+
+
+def approve(token_contract: str, amount: float, to: str):
+    t_c = I.import_module(token_contract)
+    t_c.approve(amount=amount, to=to)
+
+
+@export
+def force_transfer(token_contract: str, amount: float, to: str):
+    assert ctx.caller == settings[OWNER_STR], 'Only the owner can call this method.'
+    transfer(token_contract, amount, to)
+
+
+@export
+def force_approve(token_contract: str, amount: float, to: str):
+    assert ctx.caller == settings[OWNER_STR], 'Only the owner can call this method.'
+    approve(token_contract, amount, to)
 
 
 @export
@@ -263,6 +285,7 @@ def create_bulk_interact_proposal(action: str, payloads: dict, voting_time_in_da
 @export
 def create_change_setting_proposal(setting: str, value: Any, voting_time_in_days: int, description: str, to_float: bool = False): 
     assert voting_time_in_days >= settings[MINIMUM_PROPOSAL_DURATION_STR]
+    assert setting != OWNER_STR, 'Only the owner can change the owner setting.'
     p_id = proposal_id.get()
     proposal_id.set(p_id + 1)
     if to_float:
@@ -328,11 +351,17 @@ def determine_results(p_id: int) -> bool: #Vote resolution takes place here
         return False
     if approvals / total_votes >= settings[REQUIRED_APPROVAL_PERCENTAGE_STR]: #Checks that the approval percentage of the votes has been reached (% of total votes)
         if proposal_details[p_id, "type"] == "transfer": 
-            t_c = I.import_module(proposal_details[p_id, "token_contract"])
-            t_c.transfer(proposal_details[p_id, "amount"], proposal_details[p_id, "receiver"])
+            transfer(
+                I.import_module(proposal_details[p_id, "token_contract"]),
+                amount=proposal_details[p_id, "amount"],
+                to=proposal_details[p_id, "receiver"],
+            )
         elif proposal_details[p_id, "type"] == "approval":
-            t_c = I.import_module(proposal_details[p_id, "token_contract"])
-            t_c.approve(proposal_details[p_id, "amount"], proposal_details[p_id, "receiver"])
+            approve(
+                I.import_module(proposal_details[p_id, "token_contract"]),
+                amount=proposal_details[p_id, "amount"],
+                to=proposal_details[p_id, "receiver"],
+            )
         elif proposal_details[p_id, "type"] == "register_action":
             register_action(
                 action=proposal_details[p_id, "action"],
@@ -360,7 +389,7 @@ def determine_results(p_id: int) -> bool: #Vote resolution takes place here
                 caller=proposal_details[p_id, "caller"] or ctx.this,
             )
         elif proposal_details[p_id, "type"] == "change_setting":
-            # allowlist settings?
+            # allowlist settings?            
             settings[proposal_details[p_id, "setting"]] = proposal_details[p_id, "value"]
         status[p_id] = True
         return True
