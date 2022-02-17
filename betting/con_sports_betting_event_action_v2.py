@@ -1,4 +1,4 @@
-# con_sports_betting_event_action_v1
+# con_sports_betting_event_action_v2
 # owner: con_gamma_phi_dao_v1
 import currency as tau
 I = importlib
@@ -92,44 +92,52 @@ def validate_event(event_id: int, winning_option_id: int, caller: str, state: An
     events[event_id, 'validated_time'] = now
 
 
-def add_event(metadata: dict, wager: dict, timestamp: int, caller: str, state: Any) -> str:
+def add_event(away_team: str, home_team: str, date: str, timestamp: int, sport: str, wager_name: str, wager_options: list, caller: str, state: Any, spread: int = None, total: int = None) -> str:
     stakes = ForeignHash(foreign_contract=ctx.owner, foreign_name='stakes')
     assert (stakes[caller] or 0) >= get_setting_helper(REQUIRED_STAKE_ADD_EVENT_STR), 'Not enough stake.'
     assert timestamp > get_current_time(), 'Timestamp is in the past.'
     event_id = total_num_events.get()
-    events[event_id, 'metadata'] = metadata
     events[event_id, 'timestamp'] = timestamp
     events[event_id, 'live'] = True
     events[event_id, 'creator'] = caller
-    events[event_id, 'wager'] = wager
     # validate wager
-    wager_type = wager.get('name')
-    wager_options = wager.get('options')
-    assert wager_type is not None, 'Each wager must have a name.'        
+    assert wager_name is not None, 'Each wager must have a name.'        
     assert wager_options is not None, 'Each wager must have a list of options.'
     assert isinstance(wager_options, list), 'Options must be a list.'
     for option_id in range(len(wager_options)):
         assert isinstance(wager_options[option_id], str), 'Each option must be a string.'
-    away_team = metadata.get('away_team')
-    home_team = metadata.get('home_team')
-    sport = metadata.get('sport')
-    date = metadata.get('date')
+    wager = {
+        'name': wager_name,
+        'options': wager_options,        
+    }
+    if spread is not None:
+        wager['spread'] = spread
+    if total is not None:
+        wager['total'] = total
+    events[event_id, 'wager'] = wager
     assert away_team is not None, 'away_team must be present in metadata.'
     assert home_team is not None, 'home_team must be present in metadata.'
     assert sport is not None, 'sport must be present in metadata.'
     assert date is not None, 'date must be present in metadata.'
-    event_data = [sport, away_team, home_team, date, wager_type]
+    events[event_id, 'metadata'] = {
+        'away_team': away_team,
+        'home_team': home_team,
+        'sport': sport,
+        'date': date,
+        'timestamp': timestamp
+    }
+    event_data = [sport, away_team, home_team, date, wager_name]
     event_data.extend(wager_options)
-    if wager_type == 'spread':
+    if wager_name == 'spread':
         spread = wager.get('spread')
         assert spread is not None, 'Spread wager must have a spread.'
         event_data.append(str(spread))
-    elif wager_type == 'total':
+    elif wager_name == 'total':
         total = wager.get('total')
         assert total is not None, 'Total wager must have a total.'
         event_data.append(str(total))
     else:
-        assert wager_type == 'moneyline', f'Invalid wager type: {wager_type}.'
+        assert wager_name == 'moneyline', f'Invalid wager type: {wager_name}.'
     event_hash = hashlib.sha256(','.join(event_data))
     assert events[event_hash] is None, 'This event has already been created.'
     events[event_hash] = event_id

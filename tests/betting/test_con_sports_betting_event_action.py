@@ -12,7 +12,7 @@ client = ContractingClient()
 module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'dao')
 
 DAO_CONTRACT = 'con_gamma_phi_dao_v1'
-SPORTS_BETTING_CONTRACT = 'con_sports_betting_event_action_v1'
+SPORTS_BETTING_CONTRACT = 'con_sports_betting_event_action_v2'
 CURRENCY_CONTRACT = 'currency'
 PHI_CONTRACT = 'con_phi_lst001'
 SPORTS_BETTING_ACTION = 'sports_betting'
@@ -127,29 +127,24 @@ class TestDao(unittest.TestCase):
         timestamp = int(time.time())
         date = str(datetime.today())
         event_id = sports.quick_read('total_num_events')
-        metadata =  {
-            'sport': 'Tennis',
-            'away_team': 'Venus',
-            'home_team': 'Serena',
-            'date': date
-        }
-
         # Create event
         interact(
             USER_1,
             function='add_event',
             kwargs={
-                'metadata': metadata,
-                'wager': {
-                    'name': 'moneyline',
-                    'options': ['Venus', 'Serena']
-                }, 'timestamp': timestamp
+                'sport': 'Tennis',
+                'away_team': 'Venus',
+                'home_team': 'Serena',
+                'date': date,
+                'timestamp': timestamp,
+                'wager_name': 'moneyline',
+                'wager_options': ['Venus', 'Serena']
             },
             now=datetime.today() - timedelta(days=3)
         )
         event_id_after = sports.quick_read('total_num_events')
         self.assertEqual(event_id_after - 1, event_id)
-        self.assertDictEqual(metadata, sports.quick_read('events', event_id, ['metadata']))
+        #self.assertDictEqual(metadata, sports.quick_read('events', event_id, ['metadata']))
         self.assertEqual(USER_1, sports.quick_read('events', event_id, ['creator']))
 
         # Place bets
@@ -277,11 +272,13 @@ class TestDao(unittest.TestCase):
             USER_1,
             function='add_event',
             kwargs={
-                'metadata': metadata,
-                'wager': {
-                    'name': 'moneyline',
-                    'options': ['Venus', 'Serena', 'Tie']
-                }, 'timestamp': timestamp
+                'timestamp': timestamp,
+                'sport': 'Tennis',
+                'away_team': 'Venus',
+                'home_team': 'Serena',
+                'date': date,
+                'wager_name': 'moneyline',
+                'wager_options': ['Venus', 'Serena', 'Tie']
             },
             now=datetime.today() - timedelta(days=3)
         )
