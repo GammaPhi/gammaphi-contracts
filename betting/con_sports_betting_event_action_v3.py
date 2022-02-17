@@ -1,4 +1,4 @@
-# con_sports_betting_event_action_v2
+# con_sports_betting_event_action_v3
 # owner: con_gamma_phi_dao_v1
 import currency as tau
 I = importlib
@@ -92,7 +92,7 @@ def validate_event(event_id: int, winning_option_id: int, caller: str, state: An
     events[event_id, 'validated_time'] = now
 
 
-def add_event(away_team: str, home_team: str, date: str, timestamp: int, sport: str, wager_name: str, wager_options: list, caller: str, state: Any, spread: int = None, total: int = None) -> str:
+def add_event(away_team: str, home_team: str, date: str, timestamp: int, sport: str, wager_name: str, num_wager_options: int, caller: str, state: Any, spread: int = None, total: int = None) -> str:
     stakes = ForeignHash(foreign_contract=ctx.owner, foreign_name='stakes')
     assert (stakes[caller] or 0) >= get_setting_helper(REQUIRED_STAKE_ADD_EVENT_STR), 'Not enough stake.'
     assert timestamp > get_current_time(), 'Timestamp is in the past.'
@@ -102,13 +102,11 @@ def add_event(away_team: str, home_team: str, date: str, timestamp: int, sport: 
     events[event_id, 'creator'] = caller
     # validate wager
     assert wager_name is not None, 'Each wager must have a name.'        
-    assert wager_options is not None, 'Each wager must have a list of options.'
-    assert isinstance(wager_options, list), 'Options must be a list.'
-    for option_id in range(len(wager_options)):
-        assert isinstance(wager_options[option_id], str), 'Each option must be a string.'
+    assert num_wager_options is not None, 'Each wager must have a number of options.'
+    assert isinstance(num_wager_options, int), 'Options must be a list.'
     wager = {
         'name': wager_name,
-        'options': wager_options,        
+        'num_options': num_wager_options,        
     }
     if spread is not None:
         wager['spread'] = spread
@@ -126,8 +124,7 @@ def add_event(away_team: str, home_team: str, date: str, timestamp: int, sport: 
         'date': date,
         'timestamp': timestamp
     }
-    event_data = [sport, away_team, home_team, date, wager_name]
-    event_data.extend(wager_options)
+    event_data = [sport, away_team, home_team, date, wager_name, str(num_wager_options)]
     if wager_name == 'spread':
         spread = wager.get('spread')
         assert spread is not None, 'Spread wager must have a spread.'

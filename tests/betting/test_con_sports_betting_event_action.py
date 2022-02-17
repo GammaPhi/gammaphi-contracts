@@ -12,7 +12,7 @@ client = ContractingClient()
 module_dir = join(dirname(dirname(dirname(abspath(__file__)))), 'dao')
 
 DAO_CONTRACT = 'con_gamma_phi_dao_v1'
-SPORTS_BETTING_CONTRACT = 'con_sports_betting_event_action_v2'
+SPORTS_BETTING_CONTRACT = 'con_sports_betting_event_action_v3'
 CURRENCY_CONTRACT = 'currency'
 PHI_CONTRACT = 'con_phi_lst001'
 SPORTS_BETTING_ACTION = 'sports_betting'
@@ -138,7 +138,7 @@ class TestDao(unittest.TestCase):
                 'date': date,
                 'timestamp': timestamp,
                 'wager_name': 'moneyline',
-                'wager_options': ['Venus', 'Serena']
+                'num_wager_options': 2
             },
             now=datetime.today() - timedelta(days=3)
         )
@@ -278,7 +278,7 @@ class TestDao(unittest.TestCase):
                 'home_team': 'Serena',
                 'date': date,
                 'wager_name': 'moneyline',
-                'wager_options': ['Venus', 'Serena', 'Tie']
+                'num_wager_options': 3
             },
             now=datetime.today() - timedelta(days=3)
         )
