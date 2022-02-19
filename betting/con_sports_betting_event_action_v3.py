@@ -83,13 +83,9 @@ def validate_event(event_id: int, winning_option_id: int, caller: str, state: An
     assert caller in get_setting_helper(TRUSTED_EVENT_VALIDATORS_STR), 'You are not a trusted validator.'
     assert events[event_id, 'validator'] is None, 'This event has already been validated.'
     events[event_id, 'live'] = False
-    if winning_option_id == -1:
-        # Tie
-        bets[event_id, 'tie'] = True
-    else:         
-        bets[event_id, winning_option_id, 'win'] = True
     events[event_id, 'validator'] = caller
     events[event_id, 'validated_time'] = now
+    events[event_id, 'winning_option_id'] = winning_option_id
 
 
 def add_event(away_team: str, home_team: str, date: str, timestamp: int, sport: str, wager_name: str, num_wager_options: int, caller: str, state: Any, spread: int = None, total: int = None) -> str:
@@ -157,7 +153,11 @@ def place_bet(event_id: int, option_id: int, amount: float, caller: str, state: 
     bets[event_id, option_id, caller] += amount
     # Store bet so we can retrieve from a UI
     num_bets = bets[caller, 'num_bets'] or 0
-    bets[caller, 'bet', num_bets] = event_id   
+    bets[caller, 'bet', num_bets] = {
+        'event_id': event_id,
+        'option_id': option_id,
+        'amount': amount
+    }
     num_bets += 1
     bets[caller, 'num_bets'] = num_bets
 
@@ -171,8 +171,9 @@ def claim_bet(event_id: int, option_id: int, caller: str, state: Any):
     validated_time = events[event_id, 'validated_time']
     assert validated_time is not None, 'Validation has not occurred yet.'
     assert (validated_time + datetime.timedelta(days=get_setting_helper(CLAIM_HOLDING_PERIOD_DAYS_STR))) <= now, "Holding period not over!"
-    is_tie = bets[event_id, 'tie']
-    assert is_tie or bets[event_id, option_id, 'win'], 'You did not win this bet.'
+    winning_option_id = events[event_id, 'winning_option_id']
+    is_tie = winning_option_id == -1
+    assert is_tie or winning_option_id == option_id, 'You did not win this bet.'
     assert events[event_id, 'dispute'] is None, 'This event is under dispute.'
     # Check if only no other options were bet on
     amount_in_option = bets[event_id, option_id]
@@ -210,10 +211,7 @@ def create_dispute(event_id: int, current_option_id: int, expected_option_id: in
     assert current_option_id != expected_option_id, 'These cannot be the same.'
     validated_time = events[event_id, 'validated_time']
     assert validated_time is not None, 'Validation has not occurred yet.'
-    if current_option_id == -1:
-        assert bets[event_id, 'tie'], 'This was not a tie.'
-    else:
-        assert bets[event_id, current_option_id, 'win'], 'This was not the result.'    
+    assert events[event_id, 'winning_option_id'] == current_option_id, 'This was not the result.'    
     amount = bets[event_id, caller]
     assert amount > 0, 'No amount in this wager.'
     assert (validated_time + datetime.timedelta(days=get_setting_helper(CLAIM_HOLDING_PERIOD_DAYS_STR))) > now, "Holding period is over!"
@@ -263,19 +261,7 @@ def determine_dispute_results(p_id: int, caller: str, state: Any): #Vote resolut
     if approvals / total_votes >= get_setting_helper(REQUIRED_DISPUTE_APPROVAL_PERCENTAGE_STR): #Checks that the approval percentage of the votes has been reached (% of total votes)
         # Change result
         expected_option_id = dispute_details[p_id, "expected_option_id"]
-        current_option_id = dispute_details[p_id, "current_option_id"]
-        # Unset this option
-        if current_option_id == -1:
-            # Tie
-            bets[event_id, 'tie'] = None
-        else:         
-            bets[event_id, current_option_id, 'win'] = None
-        # Set this option
-        if expected_option_id == -1:
-            # Tie
-            bets[event_id, 'tie'] = True
-        else:         
-            bets[event_id, expected_option_id, 'win'] = True
+        events[event_id, 'winning_option_id'] = expected_option_id
         # TODO punish validator?
         dispute_status[p_id] = True
         return True
