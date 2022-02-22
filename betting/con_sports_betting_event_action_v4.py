@@ -1,4 +1,4 @@
-# con_sports_betting_event_action_v3
+# con_sports_betting_event_action_v4
 # owner: con_gamma_phi_dao_v1
 import currency as tau
 I = importlib
@@ -88,7 +88,7 @@ def validate_event(event_id: int, winning_option_id: int, caller: str, state: An
     events[event_id, 'winning_option_id'] = winning_option_id
 
 
-def add_event(away_team: str, home_team: str, date: str, timestamp: int, sport: str, wager_name: str, num_wager_options: int, caller: str, state: Any, spread: int = None, total: int = None) -> str:
+def add_event(away_team: str, home_team: str, date: str, timestamp: int, sport: str, wager_name: str, num_options: int, caller: str, state: Any, spread: int = None, total: int = None) -> str:
     stakes = ForeignHash(foreign_contract=ctx.owner, foreign_name='stakes')
     assert (stakes[caller] or 0) >= get_setting_helper(REQUIRED_STAKE_ADD_EVENT_STR), 'Not enough stake.'
     assert timestamp > get_current_time(), 'Timestamp is in the past.'
@@ -98,35 +98,28 @@ def add_event(away_team: str, home_team: str, date: str, timestamp: int, sport: 
     events[event_id, 'creator'] = caller
     # validate wager
     assert wager_name is not None, 'Each wager must have a name.'        
-    assert num_wager_options is not None, 'Each wager must have a number of options.'
-    assert isinstance(num_wager_options, int), 'Options must be a list.'
-    wager = {
-        'name': wager_name,
-        'num_options': num_wager_options,        
-    }
+    assert num_options is not None, 'Each wager must have a number of options.'
+    assert isinstance(num_options, int), 'Options must be a list.'
+    events[event_id, 'wager', 'name'] = wager_name
+    events[event_id, 'wager', 'num_options'] = num_options
     if spread is not None:
-        wager['spread'] = spread
+        events[event_id, 'wager', 'spread'] = spread
     if total is not None:
-        wager['total'] = total
-    events[event_id, 'wager'] = wager
+        events[event_id, 'wager', 'total'] = total
     assert away_team is not None, 'away_team must be present in metadata.'
     assert home_team is not None, 'home_team must be present in metadata.'
     assert sport is not None, 'sport must be present in metadata.'
     assert date is not None, 'date must be present in metadata.'
-    events[event_id, 'metadata'] = {
-        'away_team': away_team,
-        'home_team': home_team,
-        'sport': sport,
-        'date': date,
-        'timestamp': timestamp
-    }
-    event_data = [sport, away_team, home_team, date, wager_name, str(num_wager_options)]
+    events[event_id, 'metadata', 'away_team'] = away_team
+    events[event_id, 'metadata', 'home_team'] = home_team
+    events[event_id, 'metadata', 'sport'] = sport
+    events[event_id, 'metadata', 'date'] = date
+    events[event_id, 'metadata', 'timestamp'] = timestamp
+    event_data = [sport, away_team, home_team, date, wager_name, str(num_options)]
     if wager_name == 'spread':
-        spread = wager.get('spread')
         assert spread is not None, 'Spread wager must have a spread.'
         event_data.append(str(spread))
     elif wager_name == 'total':
-        total = wager.get('total')
         assert total is not None, 'Total wager must have a total.'
         event_data.append(str(total))
     else:
@@ -153,14 +146,11 @@ def place_bet(event_id: int, option_id: int, amount: float, caller: str, state: 
     bets[event_id, option_id, caller] += amount
     # Store bet so we can retrieve from a UI
     num_bets = bets[caller, 'num_bets'] or 0
-    bets[caller, 'bet', num_bets] = {
-        'event_id': event_id,
-        'option_id': option_id,
-        'amount': amount
-    }
+    bets[caller, 'bet', num_bets, 'event_id'] = event_id
+    bets[caller, 'bet', num_bets, 'option_id'] = option_id
+    bets[caller, 'bet', num_bets, 'amount'] = amount
     num_bets += 1
     bets[caller, 'num_bets'] = num_bets
-
 
 
 def claim_bet(event_id: int, option_id: int, caller: str, state: Any):
