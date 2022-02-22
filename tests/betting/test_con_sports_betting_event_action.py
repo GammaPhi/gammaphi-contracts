@@ -138,7 +138,7 @@ class TestDao(unittest.TestCase):
                 'date': date,
                 'timestamp': timestamp,
                 'wager_name': 'moneyline',
-                'num_wager_options': 2
+                'num_options': 2
             },
             now=datetime.today() - timedelta(days=3)
         )
@@ -278,7 +278,7 @@ class TestDao(unittest.TestCase):
                 'home_team': 'Serena',
                 'date': date,
                 'wager_name': 'moneyline',
-                'num_wager_options': 3
+                'num_options': 3
             },
             now=datetime.today() - timedelta(days=3)
         )
