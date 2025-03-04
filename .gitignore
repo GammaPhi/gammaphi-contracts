@@ -3,3 +3,5 @@ __pycache__/
 .pytest_cache/
 .idea/
 tmp/
+node_modules/
+.env
